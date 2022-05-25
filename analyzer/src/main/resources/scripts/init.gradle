@@ -25,6 +25,7 @@ import javax.inject.Inject
 import org.gradle.api.internal.artifacts.repositories.DefaultFlatDirArtifactRepository
 import org.gradle.api.internal.artifacts.repositories.DefaultIvyArtifactRepository
 import org.gradle.api.internal.artifacts.repositories.DefaultMavenArtifactRepository
+import org.gradle.internal.deprecation.DeprecatableConfiguration
 import org.gradle.tooling.provider.model.ToolingModelBuilder
 import org.gradle.tooling.provider.model.ToolingModelBuilderRegistry
 
@@ -170,7 +171,9 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
             List<Configuration> configurations = project.configurations.findResults { configuration ->
                 // For versions of Gradle before the "canBeResolved" property was introduced, consider any
                 // configuration to be resolvable.
-                if (!configuration.hasProperty('canBeResolved') || configuration.canBeResolved) {
+                (new File("/tmp/resolve.txt")).append("\nProject ${project.name} Configuration ${configuration.name} canBeResolved=${configuration.canBeResolved} canBeConsumed=${configuration.canBeConsumed} canBeResolved()=${canBeResolved(configuration)}")
+                if (canBeResolved(configuration)) {
+//                if (!configuration.hasProperty('canBeResolved') || configuration.canBeResolved) {
                     ResolutionResult result = configuration.getIncoming().getResolutionResult()
                     Set<ResolvedArtifact> resolvedArtifacts = []
 
@@ -351,6 +354,11 @@ class AbstractDependencyTreePlugin<T> implements Plugin<T> {
                 return dependencyFromDisplayName(dependencyResult.requested.displayName, [],
                         "Unknown result type: ${dependencyResult.getClass().simpleName}", null)
             }
+        }
+
+        private static boolean canBeResolved(org.gradle.api.artifacts.Configuration configuration) {
+            boolean isDeprecatedForResolving = ((DeprecatableConfiguration) configuration).getResolutionAlternatives() != null;
+            return configuration.isCanBeResolved() && !isDeprecatedForResolving;
         }
 
         private static String collectCauses(Throwable throwable) {

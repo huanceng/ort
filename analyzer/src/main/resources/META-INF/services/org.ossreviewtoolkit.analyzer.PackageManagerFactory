@@ -19,4 +19,5 @@ org.ossreviewtoolkit.analyzer.managers.Sbt$Factory
 org.ossreviewtoolkit.analyzer.managers.SpdxDocumentFile$Factory
 org.ossreviewtoolkit.analyzer.managers.Stack$Factory
 org.ossreviewtoolkit.analyzer.managers.Unmanaged$Factory
+org.ossreviewtoolkit.analyzer.managers.Tracer$Factory
 org.ossreviewtoolkit.analyzer.managers.Yarn$Factory

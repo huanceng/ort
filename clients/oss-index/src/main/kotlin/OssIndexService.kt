@@ -100,7 +100,9 @@ interface OssIndexService {
         val reference: String,
 
         /** The list of known vulnerabilities. */
-        val vulnerabilities: List<Vulnerability>
+        val vulnerabilities: List<Vulnerability>,
+
+        val sonatypeOssiScore: Float? = null
     )
 
     // See https://ossindex.sonatype.org/rest#model-ComponentReportVulnerability.

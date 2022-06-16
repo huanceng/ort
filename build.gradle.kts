@@ -62,6 +62,7 @@ buildscript {
     }
 }
 
+version = "1.0.0"
 // Only override a default version (which usually is "unspecified"), but not a custom version.
 if (version == Project.DEFAULT_VERSION) {
     version = Git.open(rootDir).use { git ->

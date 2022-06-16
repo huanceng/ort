@@ -28,6 +28,7 @@ plugins {
 }
 
 dependencies {
+    api(project(":clients:cve-manager"))
     api(project(":clients:nexus-iq"))
     api(project(":clients:oss-index"))
     api(project(":clients:vulnerable-code"))

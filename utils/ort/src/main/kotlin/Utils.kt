@@ -20,6 +20,9 @@
 package org.ossreviewtoolkit.utils.ort
 
 import java.io.File
+import java.net.Authenticator
+import java.net.PasswordAuthentication
+import java.net.URI
 
 import org.ossreviewtoolkit.utils.common.Os
 import org.ossreviewtoolkit.utils.common.toSafeUri
@@ -139,13 +142,29 @@ fun filterVersionNames(version: String, names: List<String>, project: String? = 
 }
 
 /**
- * Install both the [OrtAuthenticator] and the [OrtProxySelector] to handle proxy authentication. Return the
- * [OrtProxySelector] instance for further configuration.
+ * Request a [PasswordAuthentication] object for the given [host], [port], and [scheme]. Install the [OrtAuthenticator]
+ * and the [OrtProxySelector] beforehand to ensure they are active.
  */
-fun installAuthenticatorAndProxySelector(): OrtProxySelector {
+fun requestPasswordAuthentication(host: String, port: Int, scheme: String): PasswordAuthentication? {
     OrtAuthenticator.install()
-    return OrtProxySelector.install()
+    OrtProxySelector.install()
+
+    return Authenticator.requestPasswordAuthentication(
+        /* host = */ host,
+        /* addr = */ null,
+        /* port = */ port,
+        /* protocol = */ scheme,
+        /* prompt = */ null,
+        /* scheme = */ null
+    )
 }
+
+/**
+ * Request a [PasswordAuthentication] object for the given [uri]. Install the [OrtAuthenticator] and the
+ * [OrtProxySelector] beforehand to ensure they are active.
+ */
+fun requestPasswordAuthentication(uri: URI): PasswordAuthentication? =
+    requestPasswordAuthentication(uri.host, uri.port, uri.scheme)
 
 /**
  * Normalize a string representing a [VCS URL][vcsUrl] to a common string form.

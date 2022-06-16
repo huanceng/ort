@@ -38,7 +38,6 @@ import org.ossreviewtoolkit.model.ScannerDetails
 import org.ossreviewtoolkit.model.TextLocation
 import org.ossreviewtoolkit.model.utils.associateLicensesWithExceptions
 import org.ossreviewtoolkit.utils.common.textValueOrEmpty
-import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants.LICENSE_REF_PREFIX
 import org.ossreviewtoolkit.utils.spdx.calculatePackageVerificationCode
 import org.ossreviewtoolkit.utils.spdx.toSpdxId
@@ -71,31 +70,6 @@ private val TIMEOUT_ERROR_REGEX = Pattern.compile(
             "ERROR: Processing interrupted: timeout after (?<timeout>\\d+) seconds. \\(File: (?<file>.+)\\)"
 )
 
-// A list of ScanCode-specific LicenseRefs that do not actually name concrete licenses, but which are generic findings
-// that "look like" licenses.
-private val NOASSERTION_LICENSE_REFS = listOf(
-    // https://scancode-licensedb.aboutcode.org/?search=generic
-    "LicenseRef-scancode-agpl-generic-additional-terms",
-    "LicenseRef-scancode-generic-cla",
-    "LicenseRef-scancode-generic-exception",
-    "LicenseRef-scancode-generic-export-compliance",
-    "LicenseRef-scancode-generic-tos",
-    "LicenseRef-scancode-generic-trademark",
-    "LicenseRef-scancode-gpl-generic-additional-terms",
-    "LicenseRef-scancode-patent-disclaimer",
-    "LicenseRef-scancode-warranty-disclaimer",
-
-    // https://scancode-licensedb.aboutcode.org/?search=other
-    "LicenseRef-scancode-other-copyleft",
-    "LicenseRef-scancode-other-permissive",
-
-    // https://scancode-licensedb.aboutcode.org/?search=unknown
-    "LicenseRef-scancode-free-unknown",
-    "LicenseRef-scancode-unknown",
-    "LicenseRef-scancode-unknown-license-reference",
-    "LicenseRef-scancode-unknown-spdx"
-)
-
 /**
  * Generate a summary from the given raw ScanCode [result], using [startTime] and [endTime] metadata. From the
  * [scanPath] the package verification code is generated. If [parseExpressions] is true, license findings are preferably
@@ -106,6 +80,7 @@ internal fun generateSummary(
     endTime: Instant,
     scanPath: File,
     result: JsonNode,
+    detectedLicenseMapping: Map<String, String> = emptyMap(),
     parseExpressions: Boolean = true
 ) =
     generateSummary(
@@ -113,6 +88,7 @@ internal fun generateSummary(
         endTime,
         calculatePackageVerificationCode(scanPath),
         result,
+        detectedLicenseMapping,
         parseExpressions
     )
 
@@ -126,13 +102,14 @@ internal fun generateSummary(
     endTime: Instant,
     verificationCode: String,
     result: JsonNode,
+    detectedLicenseMapping: Map<String, String> = emptyMap(),
     parseExpressions: Boolean = true
 ) =
     ScanSummary(
         startTime = startTime,
         endTime = endTime,
         packageVerificationCode = verificationCode,
-        licenseFindings = getLicenseFindings(result, parseExpressions).toSortedSet(),
+        licenseFindings = getLicenseFindings(result, detectedLicenseMapping, parseExpressions).toSortedSet(),
         copyrightFindings = getCopyrightFindings(result).toSortedSet(),
         issues = getIssues(result)
     )
@@ -189,7 +166,11 @@ private fun generateScannerOptions(options: JsonNode?): String {
  * in the result, these are preferred over separate license findings. Otherwise, only separate license findings are
  * parsed.
  */
-private fun getLicenseFindings(result: JsonNode, parseExpressions: Boolean): List<LicenseFinding> {
+private fun getLicenseFindings(
+    result: JsonNode,
+    detectedLicenseMapping: Map<String, String>,
+    parseExpressions: Boolean
+): List<LicenseFinding> {
     val licenseFindings = mutableListOf<LicenseFinding>()
 
     val header = result["headers"]?.singleOrNull()
@@ -217,14 +198,15 @@ private fun getLicenseFindings(result: JsonNode, parseExpressions: Boolean): Lis
         ).map { (licenseMatch, replacements) ->
             val spdxLicenseExpression = replaceLicenseKeys(licenseMatch.expression, replacements)
 
-            LicenseFinding(
+            LicenseFinding.createAndMap(
                 license = spdxLicenseExpression,
                 location = TextLocation(
                     path = file["path"].textValue().removePrefix(input),
                     startLine = licenseMatch.startLine,
                     endLine = licenseMatch.endLine
                 ),
-                score = licenseMatch.score
+                score = licenseMatch.score,
+                detectedLicenseMapping = detectedLicenseMapping
             )
         }
     }
@@ -246,15 +228,13 @@ private fun getSpdxLicenseId(license: JsonNode): String {
     // "LicenseRef-Proprietary-HERE" instead of now "LicenseRef-scancode-here-proprietary", see
     // https://github.com/nexB/scancode-toolkit/blob/f94f716/src/licensedcode/data/licenses/here-proprietary.yml#L6-L8
     // But if the "scancode" namespace is present, return early here.
-    val id = idFromSpdxKey.takeIf { it.startsWith(LICENSE_REF_PREFIX_SCAN_CODE) } ?: run {
+    return idFromSpdxKey.takeIf { it.startsWith(LICENSE_REF_PREFIX_SCAN_CODE) } ?: run {
         // At this point the ID is either empty or a non-ScanCode SPDX LicenseRef, so fall back to building an ID based
         // on the ScanCode-specific "key".
         val idFromKey = license["key"].textValue().toSpdxId(allowPlusSuffix = true)
 
         "$LICENSE_REF_PREFIX_SCAN_CODE$idFromKey"
     }
-
-    return id.takeUnless { it in NOASSERTION_LICENSE_REFS } ?: SpdxConstants.NOASSERTION
 }
 
 /**

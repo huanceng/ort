@@ -50,7 +50,7 @@ import org.ossreviewtoolkit.utils.ort.log
  * The [Go Modules](https://github.com/golang/go/wiki/Modules) package manager for Go.
  *
  * Note: The file `go.sum` is not a lockfile as go modules already allows for reproducible builds without that file.
- * Thus no logic for handling the [AnalyzerConfiguration.allowDynamicVersions] is needed.
+ * Thus, no logic for handling the [AnalyzerConfiguration.allowDynamicVersions] is needed.
  */
 class GoMod(
     name: String,
@@ -91,7 +91,7 @@ class GoMod(
         val projectDir = definitionFile.parentFile
 
         stashDirectories(projectDir.resolve("vendor")).use {
-            val graph = getDependencyGraph(projectDir)
+            val graph = getModuleGraph(projectDir)
             val projectId = graph.projectId()
             val vendorModules = getVendorModules(projectDir)
 
@@ -146,14 +146,21 @@ class GoMod(
             }
             .toSet()
 
-    private fun getDependencyGraph(projectDir: File): Graph {
-        fun parsePackageEntry(entry: String) =
-            Identifier(
-                type = managerName,
-                namespace = "",
-                name = entry.substringBefore('@'),
-                version = entry.substringAfter('@', "")
-            )
+    /**
+     * Return the module graph output from `go mod graph` with unused dependencies removed.
+     */
+    private fun getModuleGraph(projectDir: File): Graph {
+        val moduleVersionForModuleName = getAllModules(projectDir).associateBy({ it.name }, { it.version })
+
+        fun parseModuleEntry(entry: String): Identifier =
+            entry.substringBefore('@').let { moduleName ->
+                Identifier(
+                    type = managerName,
+                    namespace = "",
+                    name = moduleName,
+                    version = moduleVersionForModuleName[moduleName].orEmpty()
+                )
+            }
 
         var graph = Graph()
 
@@ -163,45 +170,64 @@ class GoMod(
             val columns = line.split(' ')
             require(columns.size == 2) { "Expected exactly one occurrence of ' ' on any non-blank line." }
 
-            val parent = parsePackageEntry(columns[0])
-            val child = parsePackageEntry(columns[1])
+            val parent = parseModuleEntry(columns[0])
+            val child = parseModuleEntry(columns[1])
 
             graph.addEdge(parent, child)
         }
 
-        val usedPackages = getUsedPackages(graph, projectDir, graph.projectId())
-        if (usedPackages.size < graph.size()) {
-            log.debug { "Removing ${graph.size() - usedPackages.size} unused packages from the dependency graph." }
+        val usedModules = getUsedModules(graph, projectDir, graph.projectId())
+        if (usedModules.size < graph.size()) {
+            log.debug { "Removing ${graph.size() - usedModules.size} unused modules from the dependency graph." }
 
-            graph = graph.subgraph(usedPackages)
+            graph = graph.subgraph(usedModules)
         }
 
-        val referencedPackages = graph.getTransitiveDependencies(graph.projectId())
-        if (referencedPackages.size < graph.size()) {
+        val referencedModules = graph.getTransitiveDependencies(graph.projectId())
+        if (referencedModules.size < graph.size()) {
             log.debug {
-                "Removing ${graph.size() - referencedPackages.size} unreferenced packages from the dependency graph."
+                "Removing ${graph.size() - referencedModules.size} unreferenced modules from the dependency graph."
             }
 
-            graph = graph.subgraph(referencedPackages)
+            graph = graph.subgraph(referencedModules)
         }
 
         return graph
     }
 
     /**
-     * Determine the set of packages that are actually used by the [main module][projectId] by running the _go mod why_
-     * command repeatedly in [projectDir].
+     * Return the list of all modules contained in the dependency tree with resolved versions.
      */
-    private fun getUsedPackages(graph: Graph, projectDir: File, projectId: Identifier): Set<Identifier> {
-        val usedPackageNames = mutableSetOf(projectId.name)
+    private fun getAllModules(projectDir: File): Set<Identifier> {
+        val result = mutableSetOf<Identifier>()
 
-        graph.nodes().chunked(WHY_CHUNK_SIZE).forEach { ids ->
-            val pkgNames = ids.map { it.name }.toTypedArray()
-            usedPackageNames +=
-                parseWhyOutput(run(projectDir, "mod", "why", *pkgNames).requireSuccess().stdout)
+        val list = run("list", "-m", "all", workingDir = projectDir)
+        list.stdout.lines().forEach { line ->
+            val columns = line.split(' ')
+            if (columns.size != 2) return@forEach
+
+            result += Identifier(type = managerName, namespace = "", name = columns[0], version = columns[1])
         }
 
-        return graph.nodes().filterTo(mutableSetOf()) { it.name in usedPackageNames }
+        return result
+    }
+
+    /**
+     * Determine the set of modules that are actually used by the [main module][projectId] by running the _go mod why_
+     * command repeatedly in [projectDir].
+     */
+    private fun getUsedModules(graph: Graph, projectDir: File, projectId: Identifier): Set<Identifier> {
+        val usedModuleNames = mutableSetOf(projectId.name)
+
+        graph.nodes().chunked(WHY_CHUNK_SIZE).forEach { ids ->
+            val moduleNames = ids.map { it.name }.toTypedArray()
+            // Use the ´-m´ switch to use module names because the graph also uses module names, not package names.
+            // This fixes the accidental dropping of some modules.
+            usedModuleNames +=
+                parseWhyOutput(run(projectDir, "mod", "why", "-m", *moduleNames).requireSuccess().stdout)
+        }
+
+        return graph.nodes().filterTo(mutableSetOf()) { it.name in usedModuleNames }
     }
 
     private fun createPackage(id: Identifier): Package {
@@ -225,8 +251,8 @@ class GoMod(
 
     private fun getSourceArtifactForPackage(id: Identifier): RemoteArtifact {
         /**
-         * The below construction of the remote artifact URL makes several simplifying assumptions and it is
-         * still questionable whether those assumptions are ok:
+         * The below construction of the remote artifact URL makes several simplifying assumptions and it is still
+         * questionable whether those assumptions are ok:
          *
          *   1. GOPROXY in general can hold a list of (fallback) proxy URLs.
          *   2. There are special values like 'direct' and 'off'.
@@ -289,8 +315,8 @@ private class Graph(private val nodeMap: MutableMap<Identifier, Set<Identifier>>
         )
 
     /**
-     * Search for the single package that represents the main project. This is the only package without a version.
-     * Fail if no single package with this criterion can be found.
+     * Search for the single package that represents the main project. This is the only package without a version. Fail
+     * if no single package with this criterion can be found.
      */
     fun projectId(): Identifier =
         nodes().filter { it.version.isBlank() }.let { idsWithoutVersion ->
@@ -359,17 +385,17 @@ private val PSEUDO_VERSION_REGEXES = listOf(
     // Format for no known base version, e.g. v0.0.0-20191109021931-daa7c04131f5.
     "^v0\\.0\\.0-$DATE_REVISION_PATTERN$".toRegex(),
     // Format for base version is a release version, e.g. v1.2.4-0.20191109021931-daa7c04131f5.
-    "^v[0-9]+\\.[0-9]+\\.[0-9]+-0\\.$DATE_REVISION_PATTERN$".toRegex(),
+    "^v\\d+\\.\\d+\\.\\d+-0\\.$DATE_REVISION_PATTERN$".toRegex(),
     // base version is a pre-release version, e.g. v1.2.4-pre.0.20191109021931-daa7c04131f5.
-    "^v[0-9]+\\.[0-9]+\\.[0-9]+-pre.0\\.$DATE_REVISION_PATTERN$".toRegex(),
+    "^v\\d+\\.\\d+\\.\\d+-pre.0\\.$DATE_REVISION_PATTERN$".toRegex(),
 )
 
 /** Separator string indicating that data of a new package follows in the output of the go mod why command. */
 private const val PACKAGE_SEPARATOR = "# "
 
 /**
- * Constant for the number of packages to pass to the _go mod why_ command in a single step. This value is chosen
- * rather arbitrarily to keep the command's output to a reasonable size.
+ * Constant for the number of modules to pass to the _go mod why_ command in a single step. This value is chosen rather
+ * arbitrarily to keep the command's output to a reasonable size.
  */
 private const val WHY_CHUNK_SIZE = 32
 
@@ -395,23 +421,22 @@ internal fun Identifier.toVcsInfo(): VcsInfo {
 }
 
 /**
- * Parse the given [output] generated by the _go mod why_ command and the names of packages that are reported to be
- * used by the main module.
- * See https://golang.org/ref/mod#go-mod-why.
+ * Parse the given [output] generated by the _go mod why_ command and the names of modules that are reported to be used
+ * by the main module. See https://golang.org/ref/mod#go-mod-why.
  */
 internal fun parseWhyOutput(output: String): Set<String> {
-    val usedPackages = mutableSetOf<String>()
-    var currentPackage: String? = null
+    val usedModules = mutableSetOf<String>()
+    var currentModule: String? = null
 
     output.lineSequence().forEach { line ->
         if (line.startsWith(PACKAGE_SEPARATOR)) {
-            currentPackage = line.substring(PACKAGE_SEPARATOR.length)
+            currentModule = line.substring(PACKAGE_SEPARATOR.length)
         } else {
             if (!line.startsWith('(') && line.isNotBlank()) {
-                currentPackage?.let { usedPackages += it }
+                currentModule?.let { usedModules += it }
             }
         }
     }
 
-    return usedPackages
+    return usedModules
 }

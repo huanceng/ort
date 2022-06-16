@@ -240,7 +240,7 @@ subprojects {
         kotlinOptions {
             allWarningsAsErrors = true
             jvmTarget = javaVersion.majorVersion
-            apiVersion = "1.6"
+            apiVersion = "1.7"
             freeCompilerArgs = freeCompilerArgs + customCompilerArgs
         }
     }

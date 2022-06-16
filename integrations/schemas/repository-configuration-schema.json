@@ -1,5 +1,5 @@
 {
-  "$schema": "http://json-schema.org/draft-04/schema#",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://oss-review-toolkit.org/.ort.yml",
   "title": "ORT repository configuration",
   "description": "The OSS-Review-Toolkit (ORT) provides a possibility to configure exclusions, resolutions and more in a file called `.ort.yml`. A full list of all available options can be found at https://github.com/oss-review-toolkit/ort/blob/main/docs/config-file-ort-yml.md.",
@@ -55,90 +55,7 @@
       }
     },
     "resolutions": {
-      "type": "object",
-      "description": "Resolutions for issues and rule violations.",
-      "properties": {
-        "issues": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              },
-              "reason": {
-                "$ref": "#/definitions/issueResolutionReason"
-              },
-              "comment": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "message",
-              "reason"
-            ]
-          }
-        },
-        "rule_violations": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "message": {
-                "type": "string"
-              },
-              "reason": {
-                "$ref": "#/definitions/ruleViolationResolutionReason"
-              },
-              "comment": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "message",
-              "reason"
-            ]
-          }
-        },
-        "vulnerabilities": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "reason": {
-                "$ref": "#/definitions/vulnerabilityResolutionReason"
-              },
-              "comment": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "id",
-              "reason"
-            ]
-          }
-        }
-      },
-      "anyOf": [
-        {
-          "required": [
-            "issues"
-          ]
-        },
-        {
-          "required": [
-            "rule_violations"
-          ]
-        },
-        {
-          "required": [
-            "vulnerabilities"
-          ]
-        }
-      ]
+      "$ref": "https://raw.githubusercontent.com/oss-review-toolkit/ort/main/integrations/schemas/resolutions-schema.json"
     },
     "curations": {
       "type": "object",
@@ -151,100 +68,7 @@
           }
         },
         "packages": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "curations": {
-                "type": "object",
-                "properties": {
-                  "comment": {
-                    "type": "string"
-                  },
-                  "authors": {
-                    "type": "array",
-                    "items": [
-                      {
-                        "type": "string"
-                      }
-                    ]
-                  },
-                  "concluded_license": {
-                    "type": "string"
-                  },
-                  "cpe": {
-                    "type": "string"
-                  },
-                  "declared_license_mapping": {
-                    "type": "object"
-                  },
-                  "description": {
-                    "type": "string"
-                  },
-                  "homepage_url": {
-                    "type": "string"
-                  },
-                  "purl": {
-                    "type": "string"
-                  },
-                  "binary_artifact": {
-                    "type": "object",
-                    "properties": {
-                      "url": {
-                        "type": "string"
-                      },
-                      "hash": {
-                        "type": "string"
-                      },
-                      "hash_algorithm": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "url",
-                      "hash",
-                      "hash_algorithm"
-                    ]
-                  },
-                  "source_artifact": {
-                    "type": "object",
-                    "properties": {
-                      "url": {
-                        "type": "string"
-                      },
-                      "hash": {
-                        "type": "string"
-                      },
-                      "hash_algorithm": {
-                        "type": "string"
-                      }
-                    },
-                    "required": [
-                      "url",
-                      "hash",
-                      "hash_algorithm"
-                    ]
-                  },
-                  "vcs": {
-                    "$ref": "#/definitions/vcsMatcher"
-                  },
-                  "is_meta_data_only": {
-                    "type": "boolean"
-                  },
-                  "is_modified": {
-                    "type": "boolean"
-                  }
-                }
-              }
-            },
-            "required": [
-              "id",
-              "curations"
-            ]
-          }
+          "$ref": "https://raw.githubusercontent.com/oss-review-toolkit/ort/main/integrations/schemas/curations-schema.json"
         }
       },
       "anyOf": [
@@ -264,48 +88,7 @@
       "type": "array",
       "description": "A configuration for a specific package and provenance.",
       "items": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "source_artifact_url": {
-            "type": "string"
-          },
-          "vcs": {
-            "$ref": "#/definitions/vcsMatcher"
-          },
-          "license_finding_curations": {
-            "type": "array",
-            "items": {
-              "$ref": "#/definitions/licenseFindingCurations"
-            }
-          },
-          "path_excludes": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "pattern": {
-                  "type": "string"
-                },
-                "reason": {
-                  "$ref": "#/definitions/pathExcludeReason"
-                },
-                "comment": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "pattern",
-                "reason"
-              ]
-            }
-          }
-        },
-        "required": [
-          "id"
-        ]
+        "$ref": "https://raw.githubusercontent.com/oss-review-toolkit/ort/main/integrations/schemas/package-configuration-schema.json"
       }
     },
     "license_choices": {
@@ -359,45 +142,6 @@
     }
   },
   "definitions": {
-    "vcsMatcher": {
-      "type": "object",
-      "properties": {
-        "type": {
-          "type": "string"
-        },
-        "url": {
-          "type": "string"
-        },
-        "revision": {
-          "type": "string"
-        },
-        "path": {
-          "type": "string"
-        }
-      },
-      "anyOf": [
-        {
-          "required": [
-            "type"
-          ]
-        },
-        {
-          "required": [
-            "url"
-          ]
-        },
-        {
-          "required": [
-            "revision"
-          ]
-        },
-        {
-          "required": [
-            "path"
-          ]
-        }
-      ]
-    },
     "licenseFindingCurations": {
       "type": "object",
       "properties": {
@@ -454,23 +198,6 @@
         "RUNTIME_DEPENDENCY_OF"
       ]
     },
-    "issueResolutionReason": {
-      "enum": [
-        "BUILD_TOOL_ISSUE",
-        "CANT_FIX_ISSUE",
-        "SCANNER_ISSUE"
-      ]
-    },
-    "ruleViolationResolutionReason": {
-      "enum": [
-        "CANT_FIX_EXCEPTION",
-        "DYNAMIC_LINKAGE_EXCEPTION",
-        "EXAMPLE_OF_EXCEPTION",
-        "LICENSE_ACQUIRED_EXCEPTION",
-        "NOT_MODIFIED_EXCEPTION",
-        "PATENT_GRANT_EXCEPTION"
-      ]
-    },
     "licenseFindingCurationReason": {
       "enum": [
         "CODE",
@@ -479,16 +206,6 @@
         "INCORRECT",
         "NOT_DETECTED",
         "REFERENCE"
-      ]
-    },
-    "vulnerabilityResolutionReason": {
-      "enum": [
-        "CANT_FIX_VULNERABILITY",
-        "INEFFECTIVE_VULNERABILITY",
-        "INVALID_MATCH_VULNERABILITY",
-        "MITIGATED_VULNERABILITY",
-        "WILL_NOT_FIX_VULNERABILITY",
-        "WORKAROUND_FOR_VULNERABILITY"
       ]
     }
   }

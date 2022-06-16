@@ -24,6 +24,7 @@ import io.kotest.core.spec.style.StringSpec
 import io.kotest.core.test.TestCase
 import io.kotest.matchers.file.aFile
 import io.kotest.matchers.file.exist
+import io.kotest.matchers.file.shouldContainNFiles
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.shouldNot
 
@@ -75,6 +76,40 @@ class FileArchiverTest : StringSpec() {
     }
 
     init {
+        "LICENSE files are archived by default, independently of the directory" {
+            createFile("LICENSE")
+            createFile("path/LICENSE")
+
+            val archiver = FileArchiver.createDefault()
+            archiver.archive(workingDir, PROVENANCE)
+            val result = archiver.unarchive(targetDir, PROVENANCE)
+
+            result shouldBe true
+            with(targetDir) {
+                shouldContainFileWithContent("LICENSE")
+                shouldContainFileWithContent("path/LICENSE")
+            }
+        }
+
+        "The pattern matching is case-insensitive" {
+            createFile("a/LICENSE")
+            createFile("b/License")
+            createFile("c/license")
+            createFile("d/LiCeNsE")
+
+            val archiver = FileArchiver.createDefault()
+            archiver.archive(workingDir, PROVENANCE)
+            val result = archiver.unarchive(targetDir, PROVENANCE)
+
+            result shouldBe true
+            with(targetDir) {
+                shouldContainFileWithContent("a/LICENSE")
+                shouldContainFileWithContent("b/License")
+                shouldContainFileWithContent("c/license")
+                shouldContainFileWithContent("d/LiCeNsE")
+            }
+        }
+
         "All files matching any of the patterns are archived" {
             createFile("a")
             createFile("b")
@@ -84,8 +119,9 @@ class FileArchiverTest : StringSpec() {
             val archiver = FileArchiver(listOf("a", "**/a"), storage)
 
             archiver.archive(workingDir, PROVENANCE)
-            archiver.unarchive(targetDir, PROVENANCE)
+            val result = archiver.unarchive(targetDir, PROVENANCE)
 
+            result shouldBe true
             targetDir.shouldContainFileWithContent("a")
             targetDir.shouldContainFileWithContent("d/a")
 
@@ -118,36 +154,13 @@ class FileArchiverTest : StringSpec() {
             }
         }
 
-        "LICENSE files are archived by default, independently of the directory" {
-            createFile("LICENSE")
-            createFile("path/LICENSE")
-
+        "Empty archives can be handled" {
             val archiver = FileArchiver.createDefault()
+
             archiver.archive(workingDir, PROVENANCE)
-            archiver.unarchive(targetDir, PROVENANCE)
 
-            with(targetDir) {
-                shouldContainFileWithContent("LICENSE")
-                shouldContainFileWithContent("path/LICENSE")
-            }
-        }
-
-        "The pattern matching is case-insensitive" {
-            createFile("a/LICENSE")
-            createFile("b/License")
-            createFile("c/license")
-            createFile("d/LiCeNsE")
-
-            val archiver = FileArchiver.createDefault()
-            archiver.archive(workingDir, PROVENANCE)
-            archiver.unarchive(targetDir, PROVENANCE)
-
-            with(targetDir) {
-                shouldContainFileWithContent("a/LICENSE")
-                shouldContainFileWithContent("b/License")
-                shouldContainFileWithContent("c/license")
-                shouldContainFileWithContent("d/LiCeNsE")
-            }
+            archiver.unarchive(targetDir, PROVENANCE) shouldBe true
+            targetDir shouldContainNFiles 0
         }
     }
 }

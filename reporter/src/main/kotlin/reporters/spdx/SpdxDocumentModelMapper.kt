@@ -23,11 +23,9 @@ import java.time.Instant
 import java.time.temporal.ChronoUnit
 import java.util.UUID
 
-import org.ossreviewtoolkit.model.ArtifactProvenance
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.OrtResult
 import org.ossreviewtoolkit.model.Package
-import org.ossreviewtoolkit.model.RepositoryProvenance
 import org.ossreviewtoolkit.model.ScanResult
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
@@ -70,20 +68,6 @@ object SpdxDocumentModelMapper {
         val packages = mutableListOf<SpdxPackage>()
         val relationships = mutableListOf<SpdxRelationship>()
 
-        val projectPackages = ortResult.getProjects(omitExcluded = true, includeSubProjects = false).map { project ->
-            val spdxProjectPackage = project.toPackage().toSpdxPackage(licenseInfoResolver, isProject = true)
-
-            ortResult.collectDependencies(project.id, 1).mapTo(relationships) { dependency ->
-                SpdxRelationship(
-                    spdxElementId = spdxProjectPackage.spdxId,
-                    relationshipType = SpdxRelationship.Type.DEPENDS_ON,
-                    relatedSpdxElement = dependency.toSpdxId("Package")
-                )
-            }
-
-            spdxProjectPackage
-        }
-
         ortResult.getPackages(omitExcluded = true).forEach { curatedPackage ->
             val pkg = curatedPackage.pkg
             val binaryPackage = pkg.toSpdxPackage(licenseInfoResolver)
@@ -97,69 +81,6 @@ object SpdxDocumentModelMapper {
             }
 
             packages += binaryPackage
-
-            if (pkg.vcsProcessed.url.isNotBlank()) {
-                val vcsScanResult =
-                    ortResult.getScanResultsForId(curatedPackage.pkg.id).find { it.provenance is RepositoryProvenance }
-                val provenance = vcsScanResult?.provenance as? RepositoryProvenance
-
-                val (filesAnalyzed, packageVerificationCode) =
-                    if (vcsScanResult?.summary?.packageVerificationCode?.isNotEmpty() == true) {
-                        true to vcsScanResult.toSpdxPackageVerificationCode()
-                    } else {
-                        false to null
-                    }
-
-                // TODO: The copyright text contains copyrights from all scan results.
-                val vcsPackage = binaryPackage.copy(
-                    spdxId = "${binaryPackage.spdxId}-vcs",
-                    filesAnalyzed = filesAnalyzed,
-                    downloadLocation = pkg.vcsProcessed.toSpdxDownloadLocation(provenance?.resolvedRevision),
-                    licenseConcluded = SpdxConstants.NOASSERTION,
-                    licenseDeclared = SpdxConstants.NOASSERTION,
-                    packageVerificationCode = packageVerificationCode
-                )
-
-                val vcsPackageRelationShip = SpdxRelationship(
-                    spdxElementId = binaryPackage.spdxId,
-                    relationshipType = SpdxRelationship.Type.GENERATED_FROM,
-                    relatedSpdxElement = vcsPackage.spdxId
-                )
-
-                packages += vcsPackage
-                relationships += vcsPackageRelationShip
-            }
-
-            if (pkg.sourceArtifact.url.isNotBlank()) {
-                val sourceArtifactScanResult =
-                    ortResult.getScanResultsForId(curatedPackage.pkg.id).find { it.provenance is ArtifactProvenance }
-
-                val (filesAnalyzed, packageVerificationCode) =
-                    if (sourceArtifactScanResult?.summary?.packageVerificationCode?.isNotEmpty() == true) {
-                        true to sourceArtifactScanResult.toSpdxPackageVerificationCode()
-                    } else {
-                        false to null
-                    }
-
-                // TODO: The copyright text contains copyrights from all scan results.
-                val sourceArtifactPackage = binaryPackage.copy(
-                    spdxId = "${binaryPackage.spdxId}-source-artifact",
-                    filesAnalyzed = filesAnalyzed,
-                    downloadLocation = curatedPackage.pkg.sourceArtifact.url.nullOrBlankToSpdxNone(),
-                    licenseConcluded = SpdxConstants.NOASSERTION,
-                    licenseDeclared = SpdxConstants.NOASSERTION,
-                    packageVerificationCode = packageVerificationCode
-                )
-
-                val sourceArtifactPackageRelationship = SpdxRelationship(
-                    spdxElementId = binaryPackage.spdxId,
-                    relationshipType = SpdxRelationship.Type.GENERATED_FROM,
-                    relatedSpdxElement = sourceArtifactPackage.spdxId
-                )
-
-                packages += sourceArtifactPackage
-                relationships += sourceArtifactPackageRelationship
-            }
         }
 
         return SpdxDocument(
@@ -171,9 +92,9 @@ object SpdxDocumentModelMapper {
                 licenseListVersion = SpdxLicense.LICENSE_LIST_VERSION.substringBefore("-")
             ),
             documentNamespace = "spdx://${UUID.randomUUID()}",
-            documentDescribes = projectPackages.map { it.spdxId },
+            documentDescribes = packages.map { it.spdxId },
             name = params.documentName,
-            packages = projectPackages + packages,
+            packages = packages,
             relationships = relationships.sortedBy { it.spdxElementId }
         ).addExtractedLicenseInfo(licenseTextProvider)
     }

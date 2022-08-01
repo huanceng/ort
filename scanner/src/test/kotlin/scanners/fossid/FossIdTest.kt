@@ -23,10 +23,8 @@ import io.kotest.assertions.fail
 import io.kotest.assertions.throwables.shouldThrow
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.inspectors.forAtLeastOne
-import io.kotest.matchers.collections.beEmpty
 import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
-import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.shouldContain
 
@@ -483,22 +481,6 @@ class FossIdTest : WordSpec({
             }
         }
 
-        "apply filters for namespaces and authors" {
-            val id1 = createIdentifier(1)
-            val pkg1 = createPackage(id1, createVcsInfo())
-
-            val ignoredAuthor = "hacker"
-            val pkgAuthors = setOf("foo", "bar", ignoredAuthor)
-            val id2 = createIdentifier(2).copy(namespace = "anotherNamespace")
-            val pkg2 = createPackage(id2, createVcsInfo("anotherProject"), authors = pkgAuthors)
-
-            val config = createConfig(packageNamespaceFilter = id1.namespace, packageAuthorsFilter = ignoredAuthor)
-            val fossId = createFossId(config)
-
-            val scannerRun = fossId.scan(listOf(pkg1, pkg2))
-            scannerRun.results.collectIssues().keys should beEmpty()
-        }
-
         "create a delta scan for an existing scan" {
             val projectCode = projectCode(PROJECT)
             val originCode = "originalScanCode"
@@ -768,15 +750,19 @@ private fun createFossId(config: FossIdConfig): FossId =
  */
 private fun createConfig(
     waitForResult: Boolean = true,
-    packageNamespaceFilter: String = "",
-    packageAuthorsFilter: String = "",
     deltaScans: Boolean = true,
     deltaScanLimit: Int = Int.MAX_VALUE
 ): FossIdConfig {
     val config = FossIdConfig(
-        "https://www.example.org/fossid",
-        API_KEY, USER, waitForResult, packageNamespaceFilter, packageAuthorsFilter, addAuthenticationToUrl = false,
-        deltaScans, deltaScanLimit, 60, emptyMap()
+        serverUrl = "https://www.example.org/fossid",
+        user = USER,
+        apiKey = API_KEY,
+        waitForResult = waitForResult,
+        addAuthenticationToUrl = false,
+        deltaScans = deltaScans,
+        deltaScanLimit = deltaScanLimit,
+        timeout = 60,
+        options = emptyMap()
     )
 
     val namingProvider = createNamingProviderMock()
@@ -891,21 +877,29 @@ private fun textLocation(fileIndex: Int): TextLocation =
  */
 private fun createIdentifiedFile(index: Int): IdentifiedFile {
     val file = IdentifiedFile(
-        comment = null, identificationId = index, identificationCopyright = "copyright$index",
-        isDistributed = index, rowId = index, userName = "$USER$index", userSurname = null, userUsername = null
+        comment = null,
+        identificationId = index,
+        identificationCopyright = "copyright$index",
+        isDistributed = index,
+        rowId = index,
+        userName = "$USER$index",
+        userSurname = null,
+        userUsername = null
     )
+
     val license = org.ossreviewtoolkit.clients.fossid.model.identification.identifiedFiles.License(
-        LicenseMatchType.SNIPPET,
-        index,
-        "lic$index",
-        0,
-        0,
-        0,
-        "name$index"
+        fileLicenseMatchType = LicenseMatchType.SNIPPET,
+        id = index,
+        identifier = "lic$index",
+        isFoss = 0,
+        isOsiApproved = 0,
+        isSpdxStandard = 0,
+        name = "name$index"
     )
+
     file.file = org.ossreviewtoolkit.clients.fossid.model.identification.identifiedFiles.File(
-        "identified$index",
-        "licenseIdentifier1",
+        id = "identified$index",
+        licenseIdentifier = "licenseIdentifier1",
         licenseIncludeInReport = false,
         licenseIsCopyleft = false,
         licenseIsFoss = true,
@@ -918,6 +912,7 @@ private fun createIdentifiedFile(index: Int): IdentifiedFile {
         sha1 = null,
         sha256 = null
     )
+
     return file
 }
 
@@ -926,18 +921,24 @@ private fun createIdentifiedFile(index: Int): IdentifiedFile {
  */
 private fun createMarkedIdentifiedFile(index: Int): MarkedAsIdentifiedFile {
     val file = MarkedAsIdentifiedFile(
-        identificationId = index, identificationCopyright = "copyrightMarked$index",
-        isDistributed = index, rowId = index, comment = null
+        identificationId = index,
+        identificationCopyright = "copyrightMarked$index",
+        isDistributed = index,
+        rowId = index,
+        comment = null
     )
+
     val license = License(index, LicenseMatchType.FILE, index, index, index, index, "created$index", "updated$index")
+
     license.file = LicenseFile(
-        "licenseMarkedIdentifier$index",
+        licenseIdentifier = "licenseMarkedIdentifier$index",
         licenseIncludeInReport = true,
         licenseIsCopyleft = false,
         licenseIsFoss = true,
         licenseIsSpdxStandard = true,
         licenseName = "test$index"
     )
+
     file.file = org.ossreviewtoolkit.clients.fossid.model.identification.markedAsIdentified.File(
         id = "marked$index",
         md5 = null,
@@ -947,6 +948,7 @@ private fun createMarkedIdentifiedFile(index: Int): MarkedAsIdentifiedFile {
         size = index,
         licenses = mutableMapOf(index to license)
     )
+
     return file
 }
 

@@ -49,12 +49,12 @@ FROM eclipse-temurin:11-jdk-focal AS run
 ENV \
     # Package manager versions.
     BOWER_VERSION=1.8.12 \
-    CARGO_VERSION=0.58.0-0ubuntu1~20.04.1 \
+    CARGO_VERSION=0.60.0ubuntu1-0ubuntu1~20.04.1 \
     COCOAPODS_VERSION=1.11.2 \
     COMPOSER_VERSION=1.10.1-1 \
     CONAN_VERSION=1.48.1 \
     GO_DEP_VERSION=0.5.4 \
-    GO_VERSION=1.16.5 \
+    GO_VERSION=1.18.3 \
     HASKELL_STACK_VERSION=2.1.3 \
     NPM_VERSION=8.5.0 \
     PYTHON_PIPENV_VERSION=2018.11.26 \
@@ -155,15 +155,14 @@ RUN /opt/ort/bin/import_proxy_certs.sh && \
 ARG SCANCODE_VERSION
 RUN pip install --no-cache-dir scancode-toolkit==$SCANCODE_VERSION
 
-FROM run
+FROM run AS dist
 
-COPY --from=build /usr/local/src/ort/cli/build/distributions/ort-*.tar /opt/ort.tar
-
-RUN tar xf /opt/ort.tar -C /opt/ort --exclude="*.bat" --strip-components 1 && \
-    rm /opt/ort.tar && \
+ARG ORT_VERSION
+RUN --mount=type=bind,from=build,source=/usr/local/src/ort/cli/build/distributions/ort-$ORT_VERSION.tar,target=/opt/ort.tar \
+    tar xf /opt/ort.tar -C /opt/ort --exclude="*.bat" --strip-components 1 && \
     /opt/ort/bin/ort requirements
 
 COPY --from=build /usr/local/src/ort/helper-cli/build/scripts/orth /opt/ort/bin/
-COPY --from=build /usr/local/src/ort/helper-cli/build/libs/helper-cli-*.jar /opt/ort/lib/
+COPY --from=build /usr/local/src/ort/helper-cli/build/libs/helper-cli-$ORT_VERSION.jar /opt/ort/lib/
 
 ENTRYPOINT ["/opt/ort/bin/ort"]

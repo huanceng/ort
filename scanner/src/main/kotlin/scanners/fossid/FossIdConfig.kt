@@ -30,43 +30,34 @@ import org.ossreviewtoolkit.utils.ort.log
  * * **"serverUrl":** The URL of the FossID server.
  * * **"user":** The user to connect to the FossID server.
  * * **"apiKey":** The API key of the user which connects to the FossID server.
- * * **"packageNamespaceFilter":** If this optional filter is set, only packages having an identifier in given namespace
- * will be scanned.
- * * **"packageAuthorsFilter":** If this optional filter is set, only packages from a given author will be scanned.
- * * **"addAuthenticationToUrl":** When set, ORT will add credentials from its Authenticator to the URLs sent to FossID.
- * * **"waitForResult":** When set to false, ORT doesn't wait for repositories to be downloaded nor scans to be
- * completed. As a consequence, scan results won't be available in ORT result.
- * * **"deltaScans":** When set, ORT will create delta scans. When only changes in a repository need to be scanned,
- * delta scans reuse the identifications of latest scan on this repository to reduce the amount of findings. If
- * deltaScans is set and no scan exist yet, an initial scan called "origin" scan will be created.
+ * * **"waitForResult":** When set to false, ORT does not wait for repositories to be downloaded nor scans to be
+ *   completed. As a consequence, scan results won't be available in ORT result.
+ * * **"addAuthenticationToUrl":** If set, ORT will add credentials from its Authenticator to the URLs sent to FossID.
+ * * **"deltaScans":** If set, ORT will create delta scans. When only changes in a repository need to be scanned,
+ *   delta scans reuse the identifications of the latest scan on this repository to reduce the amount of findings. If
+ *   *deltaScans* is set and no scan exist yet, an initial scan called "origin" scan will be created.
  * * **"deltaScanLimit":** This setting can be used to limit the number of delta scans to keep for a given repository.
- * So if another delta scan is created, older delta scans are deleted until this number is reached. If unspecified, no
- * limit is enforced on the number of delta scans to keep. This property is evaluated only if *deltaScans* is enabled.
+ *   So if another delta scan is created, older delta scans are deleted until this number is reached. If unspecified, no
+ *   limit is enforced on the number of delta scans to keep. This property is evaluated only if *deltaScans* is enabled.
  *
- * Naming conventions options. If they are not set, default naming convention are used.
+ * Naming conventions options. If they are not set, default naming conventions are used.
  * * **"namingProjectPattern":** A pattern for project names when projects are created on the FossID instance. Contains
- * variables prefixed by "$" e.g. "$Var1_$Var2". Variables are also passed as options and are prefixed by
- * [NAMING_CONVENTION_VARIABLE_PREFIX] e.g. namingVariableVar1 = "foo".
+ *   variables prefixed by "$" e.g. "$Var1_$Var2". Variables are also passed as options and are prefixed by
+ *   [NAMING_CONVENTION_VARIABLE_PREFIX] e.g. namingVariableVar1 = "foo".
  * * **"namingScanPattern":** A pattern for scan names when scans are created on the FossID instance.
  */
 internal data class FossIdConfig(
     /** The URL where the FossID service is running. */
     val serverUrl: String,
 
-    /** The API key to access the FossID server. */
-    val apiKey: String,
-
     /** The user to authenticate against the server. */
     val user: String,
 
+    /** The API key to access the FossID server. */
+    val apiKey: String,
+
     /** Flag whether the scanner should wait for the completion of FossID scans. */
     val waitForResult: Boolean,
-
-    /** Filter for package namespaces (empty string if undefined). */
-    val packageNamespaceFilter: String,
-
-    /** Filter for package authors (empty string if undefined). */
-    val packageAuthorsFilter: String,
 
     /** Flag whether credentials should be passed to FossID in URLs. */
     val addAuthenticationToUrl: Boolean,
@@ -87,17 +78,11 @@ internal data class FossIdConfig(
         /** Name of the configuration property for the server URL. */
         private const val SERVER_URL_PROPERTY = "serverUrl"
 
-        /** Name of the configuration property for the API key. */
-        private const val API_KEY_PROPERTY = "apiKey"
-
-        /** Name of the configuration property for the user name. */
+        /** Name of the configuration property for the username. */
         private const val USER_PROPERTY = "user"
 
-        /** Name of the configuration property for the packages namespace filter. */
-        private const val NAMESPACE_FILTER_PROPERTY = "packageNamespaceFilter"
-
-        /** Name of the configuration property for the packages authros filter. */
-        private const val AUTHORS_FILTER_PROPERTY = "packageAuthorsFilter"
+        /** Name of the configuration property for the API key. */
+        private const val API_KEY_PROPERTY = "apiKey"
 
         /** Name of the configuration property controlling that credentials are added to URLs. */
         private const val CREDENTIALS_IN_URL_PROPERTY = "addAuthenticationToUrl"
@@ -121,7 +106,7 @@ internal data class FossIdConfig(
         private const val TIMEOUT = "timeout"
 
         /**
-         * The scanner options beginning with this prefix will be used to parametrize project and scan names.
+         * The scanner options beginning with this prefix will be used to parameterize project and scan names.
          */
         private const val NAMING_CONVENTION_VARIABLE_PREFIX = "namingVariable"
 
@@ -138,18 +123,16 @@ internal data class FossIdConfig(
 
             val serverUrl = fossIdScannerOptions[SERVER_URL_PROPERTY]
                 ?: throw IllegalArgumentException("No FossID server URL configuration found.")
-            val apiKey = fossIdScannerOptions[API_KEY_PROPERTY]
-                ?: throw IllegalArgumentException("No FossID API Key configuration found.")
             val user = fossIdScannerOptions[USER_PROPERTY]
                 ?: throw IllegalArgumentException("No FossID User configuration found.")
-            val packageNamespaceFilter = fossIdScannerOptions[NAMESPACE_FILTER_PROPERTY].orEmpty()
-            val packageAuthorsFilter = fossIdScannerOptions[AUTHORS_FILTER_PROPERTY].orEmpty()
-            val addAuthenticationToUrl = fossIdScannerOptions[CREDENTIALS_IN_URL_PROPERTY]?.toBoolean() ?: false
+            val apiKey = fossIdScannerOptions[API_KEY_PROPERTY]
+                ?: throw IllegalArgumentException("No FossID API Key configuration found.")
+
             val waitForResult = fossIdScannerOptions[WAIT_FOR_RESULT_PROPERTY]?.toBoolean() ?: true
+            val addAuthenticationToUrl = fossIdScannerOptions[CREDENTIALS_IN_URL_PROPERTY]?.toBoolean() ?: false
+
             val deltaScans = fossIdScannerOptions[DELTA_SCAN_PROPERTY]?.toBoolean() ?: false
-
             val deltaScanLimit = fossIdScannerOptions[DELTA_SCAN_LIMIT_PROPERTY]?.toInt() ?: Int.MAX_VALUE
-
             val timeout = fossIdScannerOptions[TIMEOUT]?.toInt() ?: DEFAULT_TIMEOUT
 
             require(deltaScanLimit > 0) {
@@ -159,17 +142,15 @@ internal data class FossIdConfig(
             log.info { "waitForResult parameter is set to '$waitForResult'" }
 
             return FossIdConfig(
-                serverUrl,
-                apiKey,
-                user,
-                waitForResult,
-                packageNamespaceFilter,
-                packageAuthorsFilter,
-                addAuthenticationToUrl,
-                deltaScans,
-                deltaScanLimit,
-                timeout,
-                fossIdScannerOptions
+                serverUrl = serverUrl,
+                user = user,
+                apiKey = apiKey,
+                waitForResult = waitForResult,
+                addAuthenticationToUrl = addAuthenticationToUrl,
+                deltaScans = deltaScans,
+                deltaScanLimit = deltaScanLimit,
+                timeout = timeout,
+                options = fossIdScannerOptions
             )
         }
     }

@@ -1,6 +1,6 @@
 /*
  * Copyright (C) 2017-2019 HERE Europe B.V.
- * Copyright (C) 2021 Bosch.IO GmbH
+ * Copyright (C) 2021-2022 Bosch.IO GmbH
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -26,8 +26,7 @@ import com.fasterxml.jackson.annotation.JsonInclude
 
 import org.ossreviewtoolkit.model.utils.FileArchiver
 import org.ossreviewtoolkit.utils.ort.storage.FileStorage
-
-typealias ScannerOptions = Map<String, String>
+import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 
 /**
  * The configuration model of the scanner.
@@ -52,11 +51,38 @@ data class ScannerConfiguration(
     val createMissingArchives: Boolean = false,
 
     /**
+     * Mappings from licenses returned by the scanner to valid SPDX licenses. Note that these mappings are only applied
+     * in new scans, stored scan results are not affected.
+     */
+    val detectedLicenseMapping: Map<String, String> = mapOf(
+        // https://scancode-licensedb.aboutcode.org/?search=generic
+        "LicenseRef-scancode-agpl-generic-additional-terms" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-generic-cla" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-generic-exception" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-generic-export-compliance" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-generic-tos" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-generic-trademark" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-gpl-generic-additional-terms" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-patent-disclaimer" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-warranty-disclaimer" to SpdxConstants.NOASSERTION,
+
+        // https://scancode-licensedb.aboutcode.org/?search=other
+        "LicenseRef-scancode-other-copyleft" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-other-permissive" to SpdxConstants.NOASSERTION,
+
+        // https://scancode-licensedb.aboutcode.org/?search=unknown
+        "LicenseRef-scancode-free-unknown" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-unknown" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-unknown-license-reference" to SpdxConstants.NOASSERTION,
+        "LicenseRef-scancode-unknown-spdx" to SpdxConstants.NOASSERTION
+    ),
+
+    /**
      * Scanner specific configuration options. The key needs to match the name of the scanner class, e.g. "ScanCode"
      * for the ScanCode wrapper. See the documentation of the scanner for available options.
      */
     @JsonAlias("scanner")
-    val options: Map<String, ScannerOptions>? = null,
+    val options: Map<String, Options>? = null,
 
     /**
      * A map with the configurations of the scan result storages available. Based on this information the actual

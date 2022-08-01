@@ -30,6 +30,7 @@ import org.ossreviewtoolkit.clients.fossid.FossIdRestService
 import org.ossreviewtoolkit.clients.fossid.generateReport
 import org.ossreviewtoolkit.clients.fossid.model.report.ReportType
 import org.ossreviewtoolkit.clients.fossid.model.report.SelectionType
+import org.ossreviewtoolkit.model.ScanResult
 import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.utils.common.collectMessages
@@ -56,10 +57,10 @@ class FossIdReporter : Reporter {
          */
         const val SELECTION_TYPE_PROPERTY = "selectionType"
 
+        // TODO: The below should be unified with [FossId.SCAN_CODE_KEY], without creating a dependency between scanner
+        // and reporter.
         /**
          * Name of key in [ScanResult.additionalData] containing the scancode.
-         * TODO: It should be unified with [FossId.SCAN_CODE_KEY], without creating a dependency between scanner and
-         * reporter.
          */
         const val SCAN_CODE_KEY = "scancode"
     }

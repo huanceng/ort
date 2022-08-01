@@ -148,7 +148,10 @@ class CycloneDxReporter : Reporter {
             ?: setOf(FileFormat.XML)
 
         if (createSingleBom) {
-            val bom = Bom().apply { serialNumber = "urn:uuid:${UUID.randomUUID()}" }
+            val bom = Bom().apply {
+                serialNumber = "urn:uuid:${UUID.randomUUID()}"
+                components = mutableListOf()
+            }
 
             // In case of multiple projects it is not always clear for which project to create the BOM:
             //
@@ -173,7 +176,7 @@ class CycloneDxReporter : Reporter {
                 input.ortResult.dependencyNavigator.projectDependencies(project, maxDepth = 1)
             }
 
-            input.ortResult.getPackages().forEach { (pkg, _) ->
+            input.ortResult.getPackages(omitExcluded = true).forEach { (pkg, _) ->
                 val dependencyType = if (pkg.id in allDirectDependencies) "direct" else "transitive"
                 addPackageToBom(input, pkg, bom, dependencyType)
             }
@@ -181,7 +184,10 @@ class CycloneDxReporter : Reporter {
             outputFiles += writeBom(bom, schemaVersion, outputDir, REPORT_BASE_FILENAME, outputFileFormats)
         } else {
             projects.forEach { project ->
-                val bom = Bom().apply { serialNumber = "urn:uuid:${UUID.randomUUID()}" }
+                val bom = Bom().apply {
+                    serialNumber = "urn:uuid:${UUID.randomUUID()}"
+                    components = mutableListOf()
+                }
 
                 // Add information about projects as external references at the BOM level.
                 bom.addExternalReference(
@@ -206,7 +212,7 @@ class CycloneDxReporter : Reporter {
                 )
 
                 val dependencies = input.ortResult.dependencyNavigator.projectDependencies(project)
-                val packages = input.ortResult.getPackages().mapNotNull { (pkg, _) ->
+                val packages = input.ortResult.getPackages(omitExcluded = true).mapNotNull { (pkg, _) ->
                     pkg.takeIf { it.id in dependencies }
                 }
 

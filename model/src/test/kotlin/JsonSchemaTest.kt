@@ -33,7 +33,7 @@ class JsonSchemaTest : StringSpec() {
     private val mapper = FileFormat.YAML.mapper
 
     private val repositoryConfigurationSchema = JsonSchemaFactory
-        .builder(JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V4))
+        .builder(JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7))
         .objectMapper(mapper)
         .build()
         .getSchema(File("../integrations/schemas/repository-configuration-schema.json").toURI())
@@ -83,6 +83,19 @@ class JsonSchemaTest : StringSpec() {
             val packageConfiguration = File("src/test/assets/package-configuration.yml").toJsonNode()
 
             val errors = packageConfigurationSchema.validate(packageConfiguration)
+
+            errors should beEmpty()
+        }
+
+        "resolutions.yml example validates successfully" {
+            val curationsSchema = JsonSchemaFactory
+                .builder(JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7))
+                .objectMapper(mapper)
+                .build()
+                .getSchema(File("../integrations/schemas/resolutions-schema.json").toURI())
+            val curationsExample = File("../examples/resolutions.yml").toJsonNode()
+
+            val errors = curationsSchema.validate(curationsExample)
 
             errors should beEmpty()
         }

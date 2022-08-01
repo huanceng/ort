@@ -339,8 +339,8 @@ supported:
   * [NPM](https://www.npmjs.com/) (limitations:
   [no scope-specific registries](https://github.com/oss-review-toolkit/ort/issues/3741),
   [no peer dependencies](https://github.com/oss-review-toolkit/ort/issues/95))
-  * [Yarn](https://classic.yarnpkg.com/) (limitations:
-  [no Yarn 2 / 3 support](https://github.com/oss-review-toolkit/ort/issues/2283))
+  * [Yarn 1](https://classic.yarnpkg.com/)
+  * [Yarn 2+](https://next.yarnpkg.com/)
 * .NET
   * [DotNet](https://docs.microsoft.com/en-us/dotnet/core/tools/) (limitations:
   [no floating versions / ranges](https://github.com/oss-review-toolkit/ort/pull/1303#issue-253860146),
@@ -367,8 +367,8 @@ supported:
   * [Cargo](https://doc.rust-lang.org/cargo/)
 * Scala
   * [SBT](https://www.scala-sbt.org/)
-* Unmanged
-  * This is a special "package manager" that mananges all files that cannot be associated to any of the other package
+* Unmanaged
+  * This is a special "package manager" that manages all files that cannot be associated to any of the other package
   managers.
 
 <a name="analyzer-for-spdx-documents"></a>

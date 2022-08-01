@@ -64,8 +64,8 @@ import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.UnknownProvenance
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.DownloaderConfiguration
+import org.ossreviewtoolkit.model.config.Options
 import org.ossreviewtoolkit.model.config.ScannerConfiguration
-import org.ossreviewtoolkit.model.config.ScannerOptions
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.scanner.AbstractScannerFactory
 import org.ossreviewtoolkit.scanner.Scanner
@@ -76,8 +76,8 @@ import org.ossreviewtoolkit.scanner.experimental.ScanContext
 import org.ossreviewtoolkit.utils.common.enumSetOf
 import org.ossreviewtoolkit.utils.common.replaceCredentialsInUri
 import org.ossreviewtoolkit.utils.common.toUri
-import org.ossreviewtoolkit.utils.ort.installAuthenticatorAndProxySelector
 import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.requestPasswordAuthentication
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
 /**
@@ -159,14 +159,7 @@ class FossId internal constructor(
 
             log.info { "Requesting authentication for host ${repoUri.host} ..." }
 
-            val creds = Authenticator.requestPasswordAuthentication(
-                /* host = */ repoUri.host,
-                /* addr = */ null,
-                /* port = */ repoUri.port,
-                /* protocol = */ repoUri.scheme,
-                /* prompt = */ null,
-                /* scheme = */ null
-            )
+            val creds = requestPasswordAuthentication(repoUri)
             return creds?.let {
                 repoUrl.replaceCredentialsInUri("${creds.userName}:${String(creds.password)}")
             } ?: repoUrl
@@ -205,7 +198,7 @@ class FossId internal constructor(
 
     override val configuration = ""
 
-    override fun filterSecretOptions(options: ScannerOptions) =
+    override fun filterSecretOptions(options: Options) =
         options.mapValues { (k, v) ->
             v.takeUnless { k in secretKeys }.orEmpty()
         }
@@ -231,19 +224,8 @@ class FossId internal constructor(
         packages: Set<Package>,
         labels: Map<String, String>
     ): Map<Package, List<ScanResult>> {
-        installAuthenticatorAndProxySelector()
-
         val (results, duration) = measureTimedValue {
             val results = mutableMapOf<Package, MutableList<ScanResult>>()
-
-            log.info {
-                if (config.packageNamespaceFilter.isEmpty()) "No package namespace filter is set."
-                else "Package namespace filter is '${config.packageNamespaceFilter}'."
-            }
-            log.info {
-                if (config.packageAuthorsFilter.isEmpty()) "No package authors filter is set."
-                else "Package authors filter is '${config.packageAuthorsFilter}'."
-            }
 
             fun addPackageWithSingleIssue(pkg: Package, issue: OrtIssue, provenance: Provenance) {
                 val time = Instant.now()
@@ -253,8 +235,6 @@ class FossId internal constructor(
             }
 
             val filteredPackages = packages
-                .filter { config.packageNamespaceFilter.isEmpty() || it.id.namespace == config.packageNamespaceFilter }
-                .filter { config.packageAuthorsFilter.isEmpty() || config.packageAuthorsFilter in it.authors }
                 .partition { it.vcsProcessed.type == VcsType.GIT }
                 .let { (packagesInsideGit, packagesOutsideGit) ->
                     packagesOutsideGit.forEach {
@@ -732,7 +712,7 @@ class FossId internal constructor(
 
         val (licenseFindings, copyrightFindings) = rawResults.markedAsIdentifiedFiles.ifEmpty {
             rawResults.identifiedFiles
-        }.mapSummary(ignoredFiles, issues)
+        }.mapSummary(ignoredFiles, issues, scannerConfig.detectedLicenseMapping)
 
         val summary = ScanSummary(
             startTime = startTime,

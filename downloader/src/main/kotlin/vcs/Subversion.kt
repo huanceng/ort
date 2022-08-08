@@ -33,7 +33,7 @@ import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.ort.OrtAuthenticator
 import org.ossreviewtoolkit.utils.ort.OrtProxySelector
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.ort.requestPasswordAuthentication
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
@@ -62,7 +62,7 @@ class Subversion : VersionControlSystem() {
     override val priority = 10
     override val latestRevisionNames = listOf("HEAD")
 
-    override fun getVersion() = Version.getVersionString()
+    override fun getVersion(): String = Version.getVersionString()
 
     override fun getDefaultBranchName(url: String) = "trunk"
 
@@ -112,7 +112,7 @@ class Subversion : VersionControlSystem() {
                 } catch (e: SVNException) {
                     e.showStackTrace()
 
-                    log.info { "Unable to list remote refs for $type repository at $remoteUrl." }
+                    logger.info { "Unable to list remote refs for $type repository at $remoteUrl." }
                 }
 
                 return refs
@@ -134,7 +134,7 @@ class Subversion : VersionControlSystem() {
         } catch (e: SVNException) {
             e.showStackTrace()
 
-            log.debug {
+            logger.debug {
                 "An exception was thrown when checking $vcsUrl for a $type repository: ${e.collectMessages()}"
             }
 
@@ -215,7 +215,7 @@ class Subversion : VersionControlSystem() {
                 // Then update the working tree in the current revision along the requested path, and ...
                 updateEmptyPath(workingTree, SVNRevision.HEAD, path)
 
-                // finally deepen only the requested path in the current revision.
+                // Finally, deepen only the requested path in the current revision.
                 clientManager.updateClient.apply { isIgnoreExternals = !recursive }.doUpdate(
                     workingTree.workingDir.resolve(path),
                     SVNRevision.HEAD,
@@ -229,7 +229,7 @@ class Subversion : VersionControlSystem() {
         }.onFailure {
             it.showStackTrace()
 
-            log.warn {
+            logger.warn {
                 "Failed to update the $type working tree at '${workingTree.workingDir}' to revision '$revision':\n" +
                         it.collectMessages()
             }

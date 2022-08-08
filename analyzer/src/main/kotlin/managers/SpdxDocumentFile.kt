@@ -26,6 +26,8 @@ import java.util.SortedSet
 
 import org.ossreviewtoolkit.analyzer.AbstractPackageManagerFactory
 import org.ossreviewtoolkit.analyzer.PackageManager
+import org.ossreviewtoolkit.analyzer.PackageManagerResult
+import org.ossreviewtoolkit.analyzer.managers.utils.PackageManagerDependencyHandler
 import org.ossreviewtoolkit.analyzer.managers.utils.SpdxDocumentCache
 import org.ossreviewtoolkit.analyzer.managers.utils.SpdxResolvedDocument
 import org.ossreviewtoolkit.downloader.VersionControlSystem
@@ -46,8 +48,10 @@ import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.orEmpty
 import org.ossreviewtoolkit.model.utils.toPurl
+import org.ossreviewtoolkit.utils.common.getQueryParameters
+import org.ossreviewtoolkit.utils.common.toUri
 import org.ossreviewtoolkit.utils.common.withoutPrefix
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.model.SpdxDocument
@@ -99,6 +103,18 @@ internal fun SpdxDocument.projectPackage(): SpdxPackage? =
         ?.singleOrNull { it.packageFilename.isEmpty() || it.packageFilename == "." }
 
 /**
+ * Try to find an [SpdxExternalReference] in this [SpdxPackage] of type purl from which the scope of a
+ * package manager dependency can be extracted. Return this scope or *null* if cannot be determined.
+ */
+internal fun SpdxPackage.extractScopeFromExternalReferences(): String? =
+    externalRefs.filter { it.referenceType == SpdxExternalReference.Type.Purl }
+        // Need to convert the URI to a hierarchical one; otherwise query parameters cannot be extracted.
+        .map { it.referenceLocator.replace("pkg:", "pkg://") }
+        .firstNotNullOfOrNull {
+            it.toUri { uri -> uri.getQueryParameters()["scope"]?.singleOrNull() }.getOrNull()
+        }
+
+/**
  * Return the concluded license to be used in ORT's data model, which expects a not present value to be null instead
  * of NONE or NOASSERTION.
  */
@@ -115,7 +131,7 @@ private fun SpdxPackage.getRemoteArtifact(): RemoteArtifact? =
         SPDX_VCS_PREFIXES.any { (prefix, _) -> downloadLocation.startsWith(prefix) } -> null
         else -> {
             if (downloadLocation.endsWith(".git")) {
-                log.warn {
+                logger.warn {
                     "The download location $downloadLocation of SPDX package '$spdxId' looks like a Git repository " +
                             "URL but it lacks the 'git+' prefix and thus will be treated as an artifact URL."
                 }
@@ -318,7 +334,7 @@ class SpdxDocumentFile(
     ): SortedSet<PackageReference> =
         getDependencies(pkgId, doc, packages, SpdxRelationship.Type.DEPENDENCY_OF) { target ->
             val issues = mutableListOf<OrtIssue>()
-            doc.getSpdxPackageForId(target, issues)?.let { dependency ->
+            getPackageManagerDependency(target, doc) ?: doc.getSpdxPackageForId(target, issues)?.let { dependency ->
                 packages += dependency.toPackage(doc.getDefinitionFile(target), doc)
 
                 PackageReference(
@@ -329,6 +345,35 @@ class SpdxDocumentFile(
                 )
             }
         }
+
+    internal fun getPackageManagerDependency(pkgId: String, doc: SpdxResolvedDocument): PackageReference? {
+        val spdxPackage = doc.getSpdxPackageForId(pkgId, mutableListOf()) ?: return null
+        val definitionFile = doc.getDefinitionFile(pkgId) ?: return null
+
+        if (spdxPackage.packageFilename.isBlank()) return null
+
+        val scope = spdxPackage.extractScopeFromExternalReferences() ?: return null
+
+        val packageFile = definitionFile.parentFile.resolve(spdxPackage.packageFilename)
+
+        if (packageFile.isFile) {
+            val managedFiles = findManagedFiles(packageFile.parentFile, ALL)
+            managedFiles.forEach { (factory, files) ->
+                if (files.any { it.canonicalPath == packageFile.canonicalPath }) {
+                    // TODO: The data from the spdxPackage is currently ignored, check if some fields need to be
+                    //       preserved somehow.
+                    return PackageManagerDependencyHandler.createPackageManagerDependency(
+                        packageManager = factory.managerName,
+                        definitionFile = VersionControlSystem.getPathInfo(packageFile).path,
+                        scope = scope,
+                        linkage = PackageLinkage.PROJECT_STATIC // TODO: Set linkage based on SPDX reference type.
+                    )
+                }
+            }
+        }
+
+        return null
+    }
 
     /**
      * Return the dependencies of the package with the given [pkgId] defined in [doc] of the given
@@ -359,21 +404,22 @@ class SpdxDocumentFile(
                         )
                     }
 
-                    doc.getSpdxPackageForId(source, issues)?.let { dependency ->
-                        packages += dependency.toPackage(doc.getDefinitionFile(source), doc)
-                        PackageReference(
-                            id = dependency.toIdentifier(),
-                            dependencies = getDependencies(
-                                source,
-                                doc,
-                                packages,
-                                SpdxRelationship.Type.DEPENDENCY_OF,
-                                dependsOnCase
-                            ),
-                            issues = issues,
-                            linkage = getLinkageForDependency(dependency, target, doc.relationships)
-                        )
-                    }
+                    getPackageManagerDependency(source, doc) ?: doc.getSpdxPackageForId(source, issues)
+                        ?.let { dependency ->
+                            packages += dependency.toPackage(doc.getDefinitionFile(source), doc)
+                            PackageReference(
+                                id = dependency.toIdentifier(),
+                                dependencies = getDependencies(
+                                    source,
+                                    doc,
+                                    packages,
+                                    SpdxRelationship.Type.DEPENDENCY_OF,
+                                    dependsOnCase
+                                ),
+                                issues = issues,
+                                linkage = getLinkageForDependency(dependency, target, doc.relationships)
+                            )
+                        }
                 }
 
                 // ...or on the source.
@@ -425,7 +471,7 @@ class SpdxDocumentFile(
 
             val discardedFiles = definitionFiles - remainingFiles
             if (discardedFiles.isNotEmpty()) {
-                log.info {
+                logger.info {
                     "Discarded the following ${discardedFiles.size} non-project SPDX files: " +
                             discardedFiles.joinToString { "'$it'" }
                 }
@@ -448,7 +494,7 @@ class SpdxDocumentFile(
             }
         }
 
-        log.info {
+        logger.info {
             "File '$definitionFile' contains SPDX document '${spdxDocument.name}' which describes project " +
                     "'${projectPackage.name}'."
         }
@@ -475,4 +521,12 @@ class SpdxDocumentFile(
 
         return listOf(ProjectAnalyzerResult(project, packages.toSortedSet()))
     }
+
+    /**
+     * Create the final [PackageManagerResult] by making sure that packages are removed from [projectResults] that
+     * are also referenced as project dependencies.
+     */
+    override fun createPackageManagerResult(
+        projectResults: Map<File, List<ProjectAnalyzerResult>>
+    ): PackageManagerResult = PackageManagerResult(projectResults.filterProjectPackages())
 }

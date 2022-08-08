@@ -89,12 +89,14 @@ internal class CreateAnalyzerResultCommand : CliktCommand(
 
     private val scancodeVersion by option(
         "--scancode-version",
-        help = "The ScanCode version to match for in the scan results."
+        help = "The ScanCode version to match for in the scan results. If blank, any ScanCode version is matched."
     )
 
     override fun run() {
         val ids = packageIdsFile.readLines().filterNot { it.isBlank() }.map { Identifier(it.trim()) }
-        val packages = openDatabaseConnection().use { getScannedPackages(it, ids, scancodeVersion) }.filterMaxByDate()
+        val packages = openDatabaseConnection().use { connection ->
+            getScannedPackages(connection, ids, scancodeVersion?.takeIf { it.isNotBlank() })
+        }.filterMaxByDate()
         val ortResult = createAnalyzerResult(packages)
 
         println("Writing analyzer result with ${packages.size} packages to '${ortFile.absolutePath}'.")
@@ -107,7 +109,7 @@ internal class CreateAnalyzerResultCommand : CliktCommand(
             ?: throw IllegalArgumentException("postgresStorage not configured.")
 
         val dataSource = DatabaseUtils.createHikariDataSource(
-            config = storageConfig,
+            config = storageConfig.connection,
             applicationNameSuffix = ORTH_NAME,
             maxPoolSize = 1
         )
@@ -129,7 +131,7 @@ private fun getScannedPackages(
 ): List<ScannedPackage> {
     val whereClause = listOfNotNull(
         "s.identifier = ANY(?)",
-        scanCodeVersion?.let { "s.scan_result->'scanner'->>'version' = '$it'" }
+        scanCodeVersion?.takeIf { it.isNotEmpty() }.let { "s.scan_result->'scanner'->>'version' = '$it'" }
     ).joinToString(" AND ")
 
     val query = """

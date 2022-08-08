@@ -32,7 +32,6 @@ import org.ossreviewtoolkit.analyzer.PackageCurationProvider
 import org.ossreviewtoolkit.clients.clearlydefined.ClearlyDefinedService
 import org.ossreviewtoolkit.clients.clearlydefined.ClearlyDefinedService.Server
 import org.ossreviewtoolkit.clients.clearlydefined.ComponentType
-import org.ossreviewtoolkit.clients.clearlydefined.ContributedCurations
 import org.ossreviewtoolkit.clients.clearlydefined.Coordinates
 import org.ossreviewtoolkit.clients.clearlydefined.SourceLocation
 import org.ossreviewtoolkit.model.Hash
@@ -45,7 +44,7 @@ import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.utils.toClearlyDefinedTypeAndProvider
 import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 import org.ossreviewtoolkit.utils.spdx.SpdxExpression
 import org.ossreviewtoolkit.utils.spdx.toSpdx
@@ -109,9 +108,9 @@ class ClearlyDefinedPackageCurationProvider(
         }.toMap()
 
         val contributedCurations = runCatching {
-            mutableMapOf<Coordinates, ContributedCurations>().also {
+            buildMap {
                 coordinatesToIds.keys.chunked(BULK_REQUEST_SIZE).forEach { coordinates ->
-                    it += runBlocking(Dispatchers.IO) { service.getCurations(coordinates) }
+                    putAll(runBlocking(Dispatchers.IO) { service.getCurations(coordinates) })
                 }
             }
         }.onFailure { e ->
@@ -122,7 +121,7 @@ class ClearlyDefinedPackageCurationProvider(
                     if (e.code() != HttpURLConnection.HTTP_NOT_FOUND) {
                         e.showStackTrace()
 
-                        log.warn {
+                        logger.warn {
                             val message = e.response()?.errorBody()?.string() ?: e.collectMessages()
                             "Getting curations failed with code ${e.code()}: $message"
                         }
@@ -131,12 +130,12 @@ class ClearlyDefinedPackageCurationProvider(
 
                 is JsonMappingException -> {
                     e.showStackTrace()
-                    log.warn { "Deserializing the curations failed: ${e.collectMessages()}" }
+                    logger.warn { "Deserializing the curations failed: ${e.collectMessages()}" }
                 }
 
                 else -> {
                     e.showStackTrace()
-                    log.warn { "Querying curations failed: ${e.collectMessages()}" }
+                    logger.warn { "Querying curations failed: ${e.collectMessages()}" }
                 }
             }
         }.getOrNull() ?: return emptyMap()
@@ -172,6 +171,6 @@ class ClearlyDefinedPackageCurationProvider(
             }
         }
 
-        return curations
+        return curations.mapValues { (_, curations) -> curations.distinct() }
     }
 }

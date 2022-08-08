@@ -54,7 +54,7 @@ import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
 import org.ossreviewtoolkit.utils.ort.createOrtTempFile
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.spdx.SpdxLicenseIdExpression
 
 // Use the most recent version that still supports Python 2. PIP 21.0.0 dropped Python 2 support, see
@@ -117,14 +117,14 @@ object PythonVersion : CommandLineTool {
             return scriptCmd.stdout.toInt()
         } finally {
             if (!scriptFile.delete()) {
-                log.warn { "Helper script file '$scriptFile' could not be deleted." }
+                logger.warn { "Helper script file '$scriptFile' could not be deleted." }
             }
         }
     }
 
     /**
      * Return the absolute path to the Python interpreter for the given [version]. This is helpful as esp. on Windows
-     * different Python versions can by installed in arbitrary locations, and the Python executable is even usually
+     * different Python versions can be installed in arbitrary locations, and the Python executable is even usually
      * called the same in those locations. Return `null` if no matching Python interpreter is available.
      */
     fun getPythonInterpreter(version: Int): String? =
@@ -177,12 +177,6 @@ class Pip(
             "pypi.org",
             "pypi.python.org" // Legacy
         ).flatMap { listOf("--trusted-host", it) }.toTypedArray()
-
-        /**
-         * Return a version string with leading zeros of components stripped.
-         */
-        private fun stripLeadingZerosFromVersion(version: String) =
-            version.split('.').joinToString(".") { it.trimStart('0').ifEmpty { "0" } }
     }
 
     override fun command(workingDir: File?) = "pip"
@@ -205,7 +199,7 @@ class Pip(
         // TODO: Maybe work around long shebang paths in generated scripts within a virtualenv by calling the Python
         //       executable in the virtualenv directly, see https://github.com/pypa/virtualenv/issues/997.
         val process = ProcessCapture(workingDir, resolvedCommand.path, *commandArgs)
-        log.debug { process.stdout }
+        logger.debug { process.stdout }
         return process
     }
 
@@ -269,7 +263,7 @@ class Pip(
         val (requirementsName, requirementsVersion, requirementsSuffix) = if (definitionFile.name != "setup.py") {
             val pythonVersionLines = definitionFile.readLines().filter { "python_version" in it }
             if (pythonVersionLines.isNotEmpty()) {
-                log.debug {
+                logger.debug {
                     "Some dependencies have Python version requirements:\n$pythonVersionLines"
                 }
             }
@@ -339,7 +333,7 @@ class Pip(
                 fullDependencyTree.find {
                     it["package_name"].textValue() == projectName
                 }?.get("dependencies") ?: run {
-                    log.info { "The '$projectName' project does not declare any dependencies." }
+                    logger.info { "The '$projectName' project does not declare any dependencies." }
                     EMPTY_JSON_NODE
                 }
             } else {
@@ -359,7 +353,7 @@ class Pip(
                 getPackageFromPyPi(id).enrichWith(installedPackages[id])
             }
         } else {
-            log.error {
+            logger.error {
                 "Unable to determine dependencies for project in directory '$workingDir':\n${pipdeptree.stderr}"
             }
         }
@@ -445,18 +439,18 @@ class Pip(
 
     private fun setupVirtualEnv(workingDir: File, definitionFile: File): File {
         // Create an out-of-tree virtualenv.
-        log.info { "Creating a virtualenv for the '${workingDir.name}' project directory..." }
+        logger.info { "Creating a virtualenv for the '${workingDir.name}' project directory..." }
 
         // Try to determine the Python version the project requires.
         var projectPythonVersion = PythonVersion.getPythonVersion(workingDir)
 
-        log.info { "Trying to install dependencies using Python $projectPythonVersion..." }
+        logger.info { "Trying to install dependencies using Python $projectPythonVersion..." }
 
         var virtualEnvDir = createVirtualEnv(workingDir, projectPythonVersion)
         val install = installDependencies(workingDir, definitionFile, virtualEnvDir)
 
         if (install.isError) {
-            log.debug {
+            logger.debug {
                 // pip writes the real error message to stdout instead of stderr.
                 "First try to install dependencies using Python $projectPythonVersion failed with:\n${install.stdout}"
             }
@@ -469,14 +463,14 @@ class Pip(
                 else -> throw IllegalArgumentException("Unsupported Python version $projectPythonVersion.")
             }
 
-            log.info { "Falling back to trying to install dependencies using Python $projectPythonVersion..." }
+            logger.info { "Falling back to trying to install dependencies using Python $projectPythonVersion..." }
 
             virtualEnvDir.safeDeleteRecursively()
             virtualEnvDir = createVirtualEnv(workingDir, projectPythonVersion)
             installDependencies(workingDir, definitionFile, virtualEnvDir).requireSuccess()
         }
 
-        log.info {
+        logger.info {
             "Successfully installed dependencies for project '$definitionFile' using Python $projectPythonVersion."
         }
 
@@ -495,7 +489,7 @@ class Pip(
     }
 
     private fun installDependencies(workingDir: File, definitionFile: File, virtualEnvDir: File): ProcessCapture {
-        // Ensure to have installed a version of pip that is know to work for us.
+        // Ensure to have installed a version of pip that is known to work for us.
         var pip = if (Os.isWindows) {
             // On Windows, in-place pip up- / downgrades require pip to be wrapped by "python -m", see
             // https://github.com/pypa/pip/issues/1299.
@@ -533,7 +527,7 @@ class Pip(
         // TODO: Consider logging a warning instead of an error if the command is run on a file that likely belongs to
         //       a test.
         with(pip) {
-            if (isError) log.error { errorMessage }
+            if (isError) logger.error { errorMessage }
         }
 
         return pip
@@ -569,13 +563,7 @@ class Pip(
 
             val pkgInfo = pkgData["info"]
 
-            val pkgRelease = pkgData["releases"]?.let { pkgReleases ->
-                val pkgVersion = pkgReleases.fieldNames().asSequence().find { version ->
-                    stripLeadingZerosFromVersion(version) == id.version
-                }
-
-                pkgReleases[pkgVersion]
-            } as? ArrayNode
+            val pkgRelease = pkgData["urls"] as? ArrayNode
 
             val homepageUrl = pkgInfo["home_page"]?.textValue().orEmpty()
             val declaredLicenses = getDeclaredLicenses(pkgInfo)
@@ -587,7 +575,7 @@ class Pip(
                 declaredLicensesProcessed.spdxExpression?.decompose()?.singleOrNull {
                     it is SpdxLicenseIdExpression && it.isValid() && it.toString().startsWith("BSD-")
                 }?.let { license ->
-                    log.debug { "Mapping '$GENERIC_BSD_LICENSE' to '$license' for ${id.toCoordinates()}." }
+                    logger.debug { "Mapping '$GENERIC_BSD_LICENSE' to '$license' for ${id.toCoordinates()}." }
 
                     declaredLicensesProcessed = declaredLicensesProcessed.copy(
                         mapped = declaredLicensesProcessed.mapped + mapOf(GENERIC_BSD_LICENSE to license),
@@ -619,7 +607,7 @@ class Pip(
                 vcsProcessed = processPackageVcs(VcsInfo.EMPTY, *vcsFallbackUrls)
             )
         }.onFailure {
-            log.warn { "Unable to retrieve PyPI metadata for package '${id.toCoordinates()}'." }
+            logger.warn { "Unable to retrieve PyPI metadata for package '${id.toCoordinates()}'." }
         }.getOrDefault(Package.EMPTY.copy(id = id))
     }
 
@@ -702,13 +690,13 @@ class Pip(
 
             val moreLines = licenseShortString.drop(1)
             if (moreLines.isNotEmpty()) {
-                log.warn {
+                logger.warn {
                     "The 'License' field of package '${id.toCoordinates()}' is supposed to be a short string but it " +
                             "contains the following additional lines which will be ignored:"
                 }
 
                 moreLines.forEach { line ->
-                    log.warn { line }
+                    logger.warn { line }
                 }
             }
         }
@@ -753,7 +741,7 @@ private fun Package.enrichWith(other: Package?): Package =
  * Normalize all PyPI package names to be lowercase and hyphenated as per PEP 426 and 503:
  *
  * PEP 426 (https://www.python.org/dev/peps/pep-0426/#name):
- * "All comparisons of distribution names MUST be case insensitive,
+ * "All comparisons of distribution names MUST be case-insensitive,
  * and MUST consider hyphens and underscores to be equivalent".
  *
  * PEP 503 (https://www.python.org/dev/peps/pep-0503/#normalized-names):

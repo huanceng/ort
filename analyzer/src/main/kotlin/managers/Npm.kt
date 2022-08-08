@@ -29,6 +29,7 @@ import com.vdurmont.semver4j.Requirement
 import java.io.File
 import java.io.IOException
 import java.util.SortedSet
+import java.util.concurrent.ConcurrentHashMap
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -58,6 +59,7 @@ import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.VcsInfo
 import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
+import org.ossreviewtoolkit.model.config.PackageManagerConfiguration
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.createAndLogIssue
 import org.ossreviewtoolkit.model.jsonMapper
@@ -67,17 +69,26 @@ import org.ossreviewtoolkit.model.readValue
 import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
 import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.Os
+import org.ossreviewtoolkit.utils.common.ProcessCapture
 import org.ossreviewtoolkit.utils.common.fieldNamesOrEmpty
 import org.ossreviewtoolkit.utils.common.isSymbolicLink
 import org.ossreviewtoolkit.utils.common.realFile
 import org.ossreviewtoolkit.utils.common.stashDirectories
 import org.ossreviewtoolkit.utils.common.textValueOrEmpty
 import org.ossreviewtoolkit.utils.common.withoutPrefix
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
+
+private val artifactoryApiPathPattern = Regex("(.*artifactory.*)(?:/api/npm/)(.*)")
 
 /**
  * The [Node package manager](https://www.npmjs.com/) for JavaScript.
+ *
+ * This package manager supports the following [options][PackageManagerConfiguration.options]:
+ * - *legacyPeerDeps*: If true, the "--legacy-peer-deps" flag is passed to NPM to ignore conflicts in peer dependencies
+ *   which are reported since NPM 7. This allows to analyze NPM 6 projects with peer dependency conflicts. For more
+ *   information see the [documentation](https://docs.npmjs.com/cli/v8/commands/npm-install#strict-peer-deps) and the
+ *   [NPM Blog](https://blog.npmjs.org/post/626173315965468672/npm-v7-series-beta-release-and-semver-major).
  */
 open class Npm(
     name: String,
@@ -136,13 +147,28 @@ open class Npm(
                     // a private or unpublished package under any terms", which corresponds to SPDX's "NONE".
                     declaredLicense == "UNLICENSED" -> SpdxConstants.NONE
 
-                    // NPM allows to declare non-SPDX licenses only by referencing a license file. Avoid reporting an
+                    // NPM allows declaring non-SPDX licenses only by referencing a license file. Avoid reporting an
                     // [OrtIssue] by mapping this to a valid license identifier.
                     declaredLicense.startsWith("SEE LICENSE IN ") -> SpdxConstants.NOASSERTION
 
                     else -> declaredLicense.takeUnless { it.isBlank() }
                 }
             }
+        }
+
+        /**
+         * Do various replacements in [downloadUrl]. Return the transformed URL.
+         */
+        internal fun fixDownloadUrl(downloadUrl: String): String {
+            @Suppress("HttpUrlsUsage")
+            return downloadUrl
+                // Work around the issue described at
+                // https://npm.community/t/some-packages-have-dist-tarball-as-http-and-not-https/285/19.
+                .replace("http://registry.npmjs.org/", "https://registry.npmjs.org/")
+                // Work around Artifactory returning API URLs instead of download URLs.
+                // See these somewhat related issues : https://www.jfrog.com/jira/browse/RTFACT-8727
+                // https://www.jfrog.com/jira/browse/RTFACT-18463
+                .replace(artifactoryApiPathPattern, "$1/$2")
         }
 
         /**
@@ -196,10 +222,40 @@ open class Npm(
         }
     }
 
-    private val artifactoryApiPathPattern = Regex("(.*artifactory.*)(?:/api/npm/)(.*)")
+    private val legacyPeerDeps =
+        analyzerConfig.getPackageManagerConfiguration(managerName)?.options?.get(OPTION_LEGACY_PEER_DEPS)
+            .toBoolean()
+
     private val graphBuilder = DependencyGraphBuilder(NpmDependencyHandler(this))
 
+    /**
+     * Search depth in the `node_modules` directory for `package.json` files used for collecting all packages of the
+     * projects.
+     */
+    protected open val modulesSearchDepth = Int.MAX_VALUE
+
     protected open fun hasLockFile(projectDir: File) = hasNpmLockFile(projectDir)
+
+    /**
+     * Check if [this] represents a workspace within a `node_modules` directory.
+     */
+    protected open fun File.isWorkspaceDir() = isSymbolicLink()
+
+    /**
+     * Load the submodule directories of the project defined in [moduleDir].
+     */
+    protected open fun loadWorkspaceSubmodules(moduleDir: File): List<File> {
+        val nodeModulesDir = moduleDir.resolve("node_modules")
+        if (!nodeModulesDir.isDirectory) return emptyList()
+
+        val searchDirs = nodeModulesDir.walk().maxDepth(1).filter {
+            it.isDirectory && it.name.startsWith("@")
+        }.toList() + nodeModulesDir
+
+        return searchDirs.flatMap { dir ->
+            dir.walk().maxDepth(1).filter { it.isDirectory && it.isSymbolicLink() }.toList()
+        }
+    }
 
     override fun command(workingDir: File?) = if (Os.isWindows) "npm.cmd" else "npm"
 
@@ -270,18 +326,18 @@ open class Npm(
     private fun parseInstalledModules(rootDirectory: File): Map<String, Package> {
         val nodeModulesDir = rootDirectory.resolve("node_modules")
 
-        log.info { "Searching for 'package.json' files in '$nodeModulesDir'..." }
+        logger.info { "Searching for 'package.json' files in '$nodeModulesDir'..." }
 
-        val nodeModulesFiles = nodeModulesDir.walk().filter {
+        val nodeModulesFiles = nodeModulesDir.walk().maxDepth(modulesSearchDepth).filter {
             it.name == "package.json" && isValidNodeModulesDirectory(nodeModulesDir, nodeModulesDirForPackageJson(it))
         }
 
         return runBlocking(Dispatchers.IO) {
             nodeModulesFiles.mapTo(mutableListOf()) { file ->
-                this@Npm.log.debug { "Starting to parse '$file'..." }
+                this@Npm.logger.debug { "Starting to parse '$file'..." }
                 async {
                     parsePackage(rootDirectory, file).also { (id, _) ->
-                        this@Npm.log.debug { "Finished parsing '$file' to '$id'." }
+                        this@Npm.logger.debug { "Finished parsing '$file' to '$id'." }
                     }
                 }
             }.awaitAll().toMap()
@@ -322,7 +378,7 @@ open class Npm(
     internal fun parsePackage(workingDir: File, packageFile: File): Pair<String, Package> {
         val packageDir = packageFile.parentFile
 
-        log.debug { "Found a 'package.json' file in '$packageDir'." }
+        logger.debug { "Found a 'package.json' file in '$packageDir'." }
 
         // The "name" and "version" are the only required fields, see:
         // https://docs.npmjs.com/creating-a-package-json-file#required-name-and-version-fields
@@ -350,14 +406,14 @@ open class Npm(
 
         val id = Identifier("NPM", namespace, name, version)
 
-        if (packageDir.isSymbolicLink()) {
+        if (packageDir.isWorkspaceDir()) {
             val realPackageDir = packageDir.realFile()
 
-            log.debug { "The package directory '$packageDir' links to '$realPackageDir'." }
+            logger.debug { "The package directory '$packageDir' links to '$realPackageDir'." }
 
             // Yarn workspaces refer to project dependencies from the same workspace via symbolic links. Use that
             // as the trigger to get VcsInfo locally instead of querying the NPM registry.
-            log.debug { "Resolving the package info for '${id.toCoordinates()}' locally from '$realPackageDir'." }
+            logger.debug { "Resolving the package info for '${id.toCoordinates()}' locally from '$realPackageDir'." }
 
             val vcsFromDirectory = VersionControlSystem.forDirectory(realPackageDir)?.getInfo().orEmpty()
             vcsFromPackage = vcsFromPackage.merge(vcsFromDirectory)
@@ -382,15 +438,7 @@ open class Npm(
             }
         }
 
-        @Suppress("HttpUrlsUsage")
-        downloadUrl = downloadUrl
-            // Work around the issue described at
-            // https://npm.community/t/some-packages-have-dist-tarball-as-http-and-not-https/285/19.
-            .replace("http://registry.npmjs.org/", "https://registry.npmjs.org/")
-            // Work around Artifactory returning API URLs instead of download URLs. See these somewhat related issues:
-            // https://www.jfrog.com/jira/browse/RTFACT-8727
-            // https://www.jfrog.com/jira/browse/RTFACT-18463
-            .replace(artifactoryApiPathPattern, "$1/$2")
+        downloadUrl = fixDownloadUrl(downloadUrl)
 
         val vcsFromDownloadUrl = VcsHost.parseUrl(downloadUrl)
         if (vcsFromDownloadUrl.url != downloadUrl) {
@@ -428,6 +476,17 @@ open class Npm(
         return jsonMapper.readTree(process.stdout)
     }
 
+    /** Cache for submodules identified by its moduleDir absolutePath */
+    private val submodulesCache: ConcurrentHashMap<String, List<File>> = ConcurrentHashMap()
+
+    /**
+     * Find the directories which are defined as submodules of the project within [moduleDir].
+     */
+    protected fun findWorkspaceSubmodules(moduleDir: File): List<File> =
+        submodulesCache.getOrPut(moduleDir.absolutePath) {
+            loadWorkspaceSubmodules(moduleDir)
+        }
+
     /**
      * Retrieve all the dependencies of [project] from the given [scopes] and add them to the dependency graph under
      * the given [targetScope]. Return the target scope name if dependencies are found; *null* otherwise.
@@ -463,23 +522,10 @@ open class Npm(
         )
     }
 
-    private fun findWorkspaceSubmodules(moduleDir: File): List<File> {
-        val nodeModulesDir = moduleDir.resolve("node_modules")
-        if (!nodeModulesDir.isDirectory) return emptyList()
-
-        val searchDirs = nodeModulesDir.walk().maxDepth(1).filter {
-            it.isDirectory && it.name.startsWith("@")
-        }.toList() + nodeModulesDir
-
-        return searchDirs.flatMap { dir ->
-            dir.walk().maxDepth(1).filter { it.isDirectory && it.isSymbolicLink() }.toList()
-        }
-    }
-
     private fun getModuleDependencies(moduleDir: File, scopes: Set<String>): Set<NpmModuleInfo> {
         val workspaceModuleDirs = findWorkspaceSubmodules(moduleDir)
 
-        return mutableSetOf<NpmModuleInfo>().apply {
+        return buildSet {
             addAll(getModuleInfo(moduleDir, scopes)!!.dependencies)
 
             workspaceModuleDirs.forEach { workspaceModuleDir ->
@@ -505,7 +551,7 @@ open class Npm(
         if (cycleStartIndex >= 0) {
             val cycle = (ancestorModuleIds.subList(cycleStartIndex, ancestorModuleIds.size) + moduleId)
                 .joinToString(" -> ")
-            log.debug { "Not adding dependency '$moduleId' to avoid cycle: $cycle." }
+            logger.debug { "Not adding dependency '$moduleId' to avoid cycle: $cycle." }
             return null
         }
 
@@ -527,7 +573,7 @@ open class Npm(
                 return@forEach
             }
 
-            log.debug { "Could not find module dir for '$dependencyName' within: '${pathToRoot.joinToString()}'." }
+            logger.debug { "Could not find module dir for '$dependencyName' within: '${pathToRoot.joinToString()}'." }
             getPackageReferenceForMissingModule(dependencyName, pathToRoot.first())
         }
 
@@ -551,19 +597,19 @@ open class Npm(
     private fun parsePackageJson(moduleDir: File, scopes: Set<String>): RawModuleInfo =
         rawModuleInfoCache.getOrPut(moduleDir to scopes) {
             val packageJsonFile = moduleDir.resolve("package.json")
-            log.debug { "Parsing module info from '${packageJsonFile.absolutePath}'." }
+            logger.debug { "Parsing module info from '${packageJsonFile.absolutePath}'." }
             val json = packageJsonFile.readTree()
 
             val name = json["name"].textValueOrEmpty()
             if (name.isBlank()) {
-                log.warn {
+                logger.warn {
                     "The '$packageJsonFile' does not set a name, which is only allowed for unpublished packages."
                 }
             }
 
             val version = json["version"].textValueOrEmpty()
             if (version.isBlank()) {
-                log.warn {
+                logger.warn {
                     "The '$packageJsonFile' does not set a version, which is only allowed for unpublished packages."
                 }
             }
@@ -593,19 +639,19 @@ open class Npm(
     }
 
     private fun parseProject(packageJson: File): Project {
-        log.debug { "Parsing project info from '$packageJson'." }
+        logger.debug { "Parsing project info from '$packageJson'." }
 
         val json = jsonMapper.readTree(packageJson)
 
         val rawName = json["name"].textValueOrEmpty()
         val (namespace, name) = splitNamespaceAndName(rawName)
         if (name.isBlank()) {
-            log.warn { "'$packageJson' does not define a name." }
+            logger.warn { "'$packageJson' does not define a name." }
         }
 
         val version = json["version"].textValueOrEmpty()
         if (version.isBlank()) {
-            log.warn { "'$packageJson' does not define a version." }
+            logger.warn { "'$packageJson' does not define a version." }
         }
 
         val declaredLicenses = parseLicenses(json)
@@ -644,6 +690,15 @@ open class Npm(
         process.stderr.withoutPrefix("Error: ")?.also { throw IOException(it.lineSequence().first()) }
     }
 
-    protected open fun runInstall(workingDir: File) =
-        run(workingDir, if (hasLockFile(workingDir)) "ci" else "install", "--ignore-scripts", "--no-audit")
+    protected open fun runInstall(workingDir: File): ProcessCapture {
+        val options = listOfNotNull(
+            "--ignore-scripts",
+            "--no-audit",
+            "--legacy-peer-deps".takeIf { legacyPeerDeps }
+        )
+
+        return run(workingDir, if (hasLockFile(workingDir)) "ci" else "install", *options.toTypedArray())
+    }
 }
+
+private const val OPTION_LEGACY_PEER_DEPS = "legacyPeerDeps"

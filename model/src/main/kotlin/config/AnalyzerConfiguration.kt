@@ -36,13 +36,85 @@ data class AnalyzerConfiguration(
     val allowDynamicVersions: Boolean = false,
 
     /**
-     * Package manager specific configuration options. The key needs to match the name of the package manager class,
-     * e.g. "NuGet" for the NuGet package manager. See the documentation of the respective class for available options.
+     * A list of the case-insensitive names of package managers that are enabled. Disabling a package manager in
+     * [disabledPackageManagers] overrides enabling it here.
      */
-    val options: Map<String, Options>? = null,
+    val enabledPackageManagers: List<String>? = null,
+
+    /**
+     * A list of the case-insensitive names of package managers that are disabled. Disabling a package manager in this
+     * list overrides [enabledPackageManagers].
+     */
+    val disabledPackageManagers: List<String>? = null,
+
+    /**
+     * Package manager specific configurations. The key needs to match the name of the package manager class, e.g.
+     * "NuGet" for the NuGet package manager.
+     */
+    val packageManagers: Map<String, PackageManagerConfiguration>? = null,
 
     /**
      * Configuration of the SW360 package curation provider.
      */
     val sw360Configuration: Sw360StorageConfiguration? = null
-)
+) {
+    /**
+     * A copy of [packageManagers] with case-insensitive keys.
+     */
+    private val packageManagersCaseInsensitive: Map<String, PackageManagerConfiguration>? =
+        packageManagers?.toSortedMap(String.CASE_INSENSITIVE_ORDER)
+
+    init {
+        val duplicatePackageManagers =
+            packageManagers?.keys.orEmpty() - packageManagersCaseInsensitive?.keys?.toSet().orEmpty()
+
+        require(duplicatePackageManagers.isEmpty()) {
+            "The following package managers have duplicate configuration: ${duplicatePackageManagers.joinToString()}."
+        }
+    }
+
+    /**
+     * Get a [PackageManagerConfiguration] from [packageManagers]. The difference to accessing the map directly is that
+     * [packageManager] can be case-insensitive.
+     */
+    fun getPackageManagerConfiguration(packageManager: String) = packageManagersCaseInsensitive?.get(packageManager)
+
+    /**
+     * Merge this [AnalyzerConfiguration] with [other]. Values of [other] take precedence.
+     */
+    fun merge(other: AnalyzerConfiguration): AnalyzerConfiguration {
+        val mergedPackageManagers = when {
+            packageManagers == null -> other.packageManagers
+            other.packageManagers == null -> packageManagers
+            else -> {
+                val keys = sortedSetOf(String.CASE_INSENSITIVE_ORDER).apply {
+                    addAll(packageManagers.keys)
+                    addAll(other.packageManagers.keys)
+                }
+
+                val result = sortedMapOf<String, PackageManagerConfiguration>(String.CASE_INSENSITIVE_ORDER)
+
+                keys.forEach { key ->
+                    val configSelf = getPackageManagerConfiguration(key)
+                    val configOther = other.getPackageManagerConfiguration(key)
+
+                    result[key] = when {
+                        configSelf == null -> configOther
+                        configOther == null -> configSelf
+                        else -> configSelf.merge(configOther)
+                    }
+                }
+
+                result
+            }
+        }
+
+        return AnalyzerConfiguration(
+            allowDynamicVersions = other.allowDynamicVersions,
+            enabledPackageManagers = other.enabledPackageManagers ?: enabledPackageManagers,
+            disabledPackageManagers = other.disabledPackageManagers ?: disabledPackageManagers,
+            packageManagers = mergedPackageManagers,
+            sw360Configuration = other.sw360Configuration ?: sw360Configuration
+        )
+    }
+}

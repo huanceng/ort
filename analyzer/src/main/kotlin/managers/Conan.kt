@@ -55,7 +55,7 @@ import org.ossreviewtoolkit.utils.common.stashDirectories
 import org.ossreviewtoolkit.utils.common.textValueOrEmpty
 import org.ossreviewtoolkit.utils.common.toUri
 import org.ossreviewtoolkit.utils.ort.createOrtTempDir
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.ort.requestPasswordAuthentication
 
 /**
@@ -107,6 +107,7 @@ class Conan(
     override fun command(workingDir: File?) = "conan"
 
     // TODO: Add support for Conan lock files.
+
     // protected open fun hasLockFile(projectDir: File) = null
 
     override fun transformVersion(output: String) =
@@ -144,7 +145,7 @@ class Conan(
             conanConfig?.also { configureRemoteAuthentication(it) }
 
             val jsonFile = createOrtTempDir().resolve("info.json")
-            run(workingDir, "info", ".", "--json", jsonFile.absolutePath, *DUMMY_COMPILER_SETTINGS).requireSuccess()
+            run(workingDir, "info", ".", "--json", jsonFile.absolutePath, *DUMMY_COMPILER_SETTINGS)
 
             val pkgInfos = jsonMapper.readTree(jsonFile)
             jsonFile.parentFile.safeDeleteRecursively(force = true)
@@ -192,7 +193,7 @@ class Conan(
         // List configured remotes in "remotes.txt" format.
         val remoteList = run("remote", "list", "--raw")
         if (remoteList.isError) {
-            log.warn { "Failed to list remotes." }
+            logger.warn { "Failed to list remotes." }
             return
         }
 
@@ -211,7 +212,7 @@ class Conan(
             val remoteUrl = wordIterator.next()
 
             remoteUrl.toUri().onSuccess { uri ->
-                log.info { "Found remote '$remoteName' pointing to URL $remoteUrl." }
+                logger.info { "Found remote '$remoteName' pointing to URL $remoteUrl." }
 
                 // Request authentication for the extracted remote URL.
                 val auth = requestPasswordAuthentication(uri)
@@ -220,11 +221,11 @@ class Conan(
                     // Configure Conan's authentication based on ORT's authentication for the remote.
                     val userAuth = run("user", "-r", remoteName, "-p", String(auth.password), auth.userName)
                     if (userAuth.isError) {
-                        log.error { "Failed to configure user authentication for remote '$remoteName'." }
+                        logger.error { "Failed to configure user authentication for remote '$remoteName'." }
                     }
                 }
             }.onFailure {
-                log.warn { "The remote '$remoteName' points to invalid URL $remoteUrl." }
+                logger.warn { "The remote '$remoteName' points to invalid URL $remoteUrl." }
             }
         }
     }
@@ -243,7 +244,7 @@ class Conan(
         pkg[scopeName]?.forEach { childNode ->
             val childRef = childNode.textValueOrEmpty()
             pkgInfos.find { it["reference"].textValueOrEmpty() == childRef }?.let { pkgInfo ->
-                log.debug { "Found child '$childRef'." }
+                logger.debug { "Found child '$childRef'." }
 
                 val id = parsePackageId(pkgInfo, workingDir)
                 val dependencies = parseDependencyTree(pkgInfos, pkgInfo, SCOPE_NAME_DEPENDENCIES, workingDir) +
@@ -304,7 +305,7 @@ class Conan(
     private fun inspectField(pkgName: String, workingDir: File, field: String): String =
         pkgInspectResults.getOrPut(pkgName) {
             val jsonFile = createOrtTempDir().resolve("inspect.json")
-            run(workingDir, "inspect", pkgName, "--json", jsonFile.absolutePath).requireSuccess()
+            run(workingDir, "inspect", pkgName, "--json", jsonFile.absolutePath)
             jsonMapper.readTree(jsonFile).also { jsonFile.parentFile.safeDeleteRecursively(force = true) }
         }.get(field).textValueOrEmpty()
 

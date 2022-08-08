@@ -19,11 +19,13 @@
 
 package org.ossreviewtoolkit.clients.fossid
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties
+
+@JsonIgnoreProperties(ignoreUnknown = true)
 class EntityResponseBody<T>(
     val operation: String? = null,
     val status: Int? = null,
     val message: String? = null,
-    val messageParameters: Array<String>? = null,
     val error: String? = null,
 
     val data: T? = null
@@ -34,3 +36,5 @@ typealias MapResponseBody<T> = EntityResponseBody<Map<String, T>>
 typealias PolymorphicResponseBody<T> = EntityResponseBody<PolymorphicList<T>>
 
 class PolymorphicList<T>(data: List<T> = listOf()) : List<T> by data
+
+class PolymorphicInt(val value: Int?)

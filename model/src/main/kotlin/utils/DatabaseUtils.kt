@@ -22,6 +22,8 @@ package org.ossreviewtoolkit.model.utils
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 
+import java.util.concurrent.ConcurrentHashMap
+
 import javax.sql.DataSource
 
 import kotlinx.coroutines.Deferred
@@ -31,16 +33,21 @@ import org.jetbrains.exposed.sql.Transaction
 import org.jetbrains.exposed.sql.transactions.experimental.suspendedTransactionAsync
 import org.jetbrains.exposed.sql.transactions.transaction
 
-import org.ossreviewtoolkit.model.config.PostgresStorageConfiguration
+import org.ossreviewtoolkit.model.config.PostgresConnection
 import org.ossreviewtoolkit.utils.ort.ORT_FULL_NAME
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 
 object DatabaseUtils {
     /**
-     * Return a [HikariDataSource] for the given [PostgresStorageConfiguration].
+     * This map holds the [HikariDataSource] based on the [PostgresConnection].
+     */
+    private val dataSources = ConcurrentHashMap<PostgresConnection, Lazy<DataSource>>()
+
+    /**
+     * Return a [HikariDataSource] for the given [PostgresConnection].
      */
     fun createHikariDataSource(
-        config: PostgresStorageConfiguration,
+        config: PostgresConnection,
         applicationNameSuffix: String = "",
         maxPoolSize: Int = 5
     ): Lazy<DataSource> {
@@ -60,26 +67,28 @@ object DatabaseUtils {
             "Password for PostgreSQL storage is missing."
         }
 
-        val dataSourceConfig = HikariConfig().apply {
-            jdbcUrl = config.url
-            username = config.username
-            password = config.password
-            schema = config.schema
-            maximumPoolSize = maxPoolSize
+        return dataSources.getOrPut(config) {
+            val dataSourceConfig = HikariConfig().apply {
+                jdbcUrl = config.url
+                username = config.username
+                password = config.password
+                schema = config.schema
+                maximumPoolSize = maxPoolSize
 
-            val suffix = " - $applicationNameSuffix".takeIf { applicationNameSuffix.isNotEmpty() }.orEmpty()
-            addDataSourceProperty("ApplicationName", "$ORT_FULL_NAME$suffix")
+                val suffix = " - $applicationNameSuffix".takeIf { applicationNameSuffix.isNotEmpty() }.orEmpty()
+                addDataSourceProperty("ApplicationName", "$ORT_FULL_NAME$suffix")
 
-            // Configure SSL, see: https://jdbc.postgresql.org/documentation/head/connect.html
-            // Note that the "ssl" property is only a fallback in case "sslmode" is not used. Since we always set
-            // "sslmode", "ssl" is not required.
-            addDataSourceProperty("sslmode", config.sslmode)
-            addDataSourcePropertyIfDefined("sslcert", config.sslcert)
-            addDataSourcePropertyIfDefined("sslkey", config.sslkey)
-            addDataSourcePropertyIfDefined("sslrootcert", config.sslrootcert)
+                // Configure SSL, see: https://jdbc.postgresql.org/documentation/head/connect.html
+                // Note that the "ssl" property is only a fallback in case "sslmode" is not used. Since we always set
+                // "sslmode", "ssl" is not required.
+                addDataSourceProperty("sslmode", config.sslmode)
+                addDataSourcePropertyIfDefined("sslcert", config.sslcert)
+                addDataSourcePropertyIfDefined("sslkey", config.sslkey)
+                addDataSourcePropertyIfDefined("sslrootcert", config.sslrootcert)
+            }
+
+            lazy { HikariDataSource(dataSourceConfig) }
         }
-
-        return lazyOf(HikariDataSource(dataSourceConfig))
     }
 
     /**
@@ -90,7 +99,7 @@ object DatabaseUtils {
             if (resultSet.next()) {
                 val clientEncoding = resultSet.getString(1)
                 if (clientEncoding != expectedEncoding) {
-                    DatabaseUtils.log.warn {
+                    DatabaseUtils.logger.warn {
                         "The database's client_encoding is '$clientEncoding' but should be '$expectedEncoding'."
                     }
                 }

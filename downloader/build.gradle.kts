@@ -18,11 +18,6 @@
  * License-Filename: LICENSE
  */
 
-val jgitVersion: String by project
-val jschAgentProxyVersion: String by project
-val mockkVersion: String by project
-val svnkitVersion: String by project
-
 plugins {
     // Apply core plugins.
     `java-library`
@@ -33,8 +28,6 @@ dependencies {
 
     implementation(project(":utils:ort-utils"))
 
-    implementation("com.jcraft:jsch.agentproxy.jsch:$jschAgentProxyVersion")
-
     // Force the generated Maven POM to use the same version of "jsch" Gradle resolves the version conflict to.
     implementation("com.jcraft:jsch") {
         version {
@@ -42,9 +35,10 @@ dependencies {
         }
     }
 
-    implementation("org.eclipse.jgit:org.eclipse.jgit:$jgitVersion")
-    implementation("org.eclipse.jgit:org.eclipse.jgit.ssh.jsch:$jgitVersion")
-    implementation("org.tmatesoft.svnkit:svnkit:$svnkitVersion")
+    implementation(libs.jgit)
+    implementation(libs.jgitJsch)
+    implementation(libs.jschAgentProxy)
+    implementation(libs.svnkit)
 
-    testImplementation("io.mockk:mockk:$mockkVersion")
+    testImplementation(libs.mockk)
 }

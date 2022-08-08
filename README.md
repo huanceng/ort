@@ -11,7 +11,7 @@
 [![TODOs][13]][14] [![LGTM][15]][16] [![REUSE status][17]][18] [![CII][19]][20]
 
 [1]: https://img.shields.io/badge/Join_us_on_Slack!-ort--talk-blue.svg?longCache=true&logo=slack
-[2]: https://join.slack.com/t/ort-talk/shared_invite/enQtMzk3MDU5Njk0Njc1LThiNmJmMjc5YWUxZTU4OGI5NmY3YTFlZWM5YTliZmY5ODc0MGMyOWIwYmRiZWFmNGMzOWY2NzVhYTI0NTJkNmY
+[2]: https://join.slack.com/t/ort-talk/shared_invite/zt-1c7yi4sj6-mk7R1fAa6ZdW5MQ6DfAVRg
 [3]: https://github.com/oss-review-toolkit/ort/actions/workflows/gradle-wrapper-validation.yml/badge.svg
 [4]: https://github.com/oss-review-toolkit/ort/actions/workflows/gradle-wrapper-validation.yml
 [5]: https://github.com/oss-review-toolkit/ort/actions/workflows/static-analysis.yml/badge.svg
@@ -78,7 +78,8 @@ by running `git submodule update --init --recursive`.
 Install the following basic prerequisites:
 
 * Docker 18.09 or later (and ensure its daemon is running).
-* Enable [BuildKit](https://docs.docker.com/develop/develop-images/build_enhancements/#to-enable-buildkit-builds) for Docker.
+* Enable [BuildKit](https://docs.docker.com/develop/develop-images/build_enhancements/#to-enable-buildkit-builds) for 
+  Docker.
 
 Change into the directory with ORT's source code and run `docker build -t ort .`. Alternatively, use the script at
 `scripts/docker_build.sh` which also sets the ORT version from the Git revision.
@@ -126,8 +127,8 @@ You can find further hints for using ORT with Docker in the [documentation](./do
 
 ## Run natively
 
-First of all, make sure that the locale of your system is set to `en_US.UTF-8` as using other locales might lead to
-issues with parsing the output of some external tools.
+First, make sure that the locale of your system is set to `en_US.UTF-8` as using other locales might lead to issues with
+parsing the output of some external tools.
 
 Then install any missing external command line tools as listed by
 
@@ -148,11 +149,11 @@ or
 ## Running on CI
 
 A basic ORT pipeline (using the _analyzer_, _scanner_ and _reporter_) can easily be run on
-[Jenkins CI](https://jenkins.io/) by using the [Jenkinsfile](./integrations/Jenkinsfile) in a (declarative)
-[pipeline](https://jenkins.io/doc/book/pipeline/) job. Please see the [Jenkinsfile](./integrations/Jenkinsfile) itself
-for documentation of the required Jenkins plugins. The job accepts various parameters that are translated to ORT command
-line arguments. Additionally, one can trigger a downstream job which e.g. further processes scan results. Note that it
-is the downstream job's responsibility to copy any artifacts it needs from the upstream job.
+[Jenkins CI](https://jenkins.io/) by using the [Jenkinsfile](./integrations/jenkins/Jenkinsfile) in a (declarative)
+[pipeline](https://jenkins.io/doc/book/pipeline/) job. Please see the [Jenkinsfile](./integrations/jenkins/Jenkinsfile)
+itself for documentation of the required Jenkins plugins. The job accepts various parameters that are translated to ORT
+command line arguments. Additionally, one can trigger a downstream job which e.g. further processes scan results. Note
+that it is the downstream job's responsibility to copy any artifacts it needs from the upstream job.
 
 ## Getting started
 
@@ -164,14 +165,14 @@ Please see [Getting Started](./docs/getting-started.md) for an introduction to t
 
 ORT supports several environment variables that influence its behavior:
 
-| Name | Default value | Purpose |
-| ---- | ------------- | ------- |
-| ORT_DATA_DIR | `~/.ort` | All data, like caches, archives, storages (read & write) |
-| ORT_CONFIG_DIR | `$ORT_DATA_DIR/config` | Configuration files, see below (read only) |
-| ORT_HTTP_USERNAME | Empty (n/a) | Generic username to use for HTTP(S) downloads |
-| ORT_HTTP_PASSWORD | Empty (n/a) | Generic password to use for HTTP(S) downloads |
-| http_proxy | Empty (n/a) | Proxy to use for HTTP downloads |
-| https_proxy | Empty (n/a) | Proxy to use for HTTPS downloads |
+| Name              | Default value          | Purpose                                                  |
+|-------------------|------------------------|----------------------------------------------------------|
+| ORT_DATA_DIR      | `~/.ort`               | All data, like caches, archives, storages (read & write) |
+| ORT_CONFIG_DIR    | `$ORT_DATA_DIR/config` | Configuration files, see below (read only)               |
+| ORT_HTTP_USERNAME | Empty (n/a)            | Generic username to use for HTTP(S) downloads            |
+| ORT_HTTP_PASSWORD | Empty (n/a)            | Generic password to use for HTTP(S) downloads            |
+| http_proxy        | Empty (n/a)            | Proxy to use for HTTP downloads                          |
+| https_proxy       | Empty (n/a)            | Proxy to use for HTTPS downloads                         |
 
 ### Configuration files
 
@@ -187,25 +188,25 @@ The main configuration file for the operation of ORT. This configuration is main
 the ORT instance. In contrast to the configuration files in the following, this file rarely changes once ORT is
 operational.
 
-| Format | Scope | Default location |
-| ------ | ----- | ---------------- |
-| HOCON | Global | `$ORT_CONFIG_DIR/ort.conf` |
+| Format | Scope  | Default location           |
+|--------|--------|----------------------------|
+| HOCON  | Global | `$ORT_CONFIG_DIR/ort.conf` |
 
 The [reference configuration file](./model/src/main/resources/reference.conf) gives a good impression about the content
-of the main ORT configuration file. It consists of sections related to different sub components of ORT. The meaning
-of these sections and the properties they can contain is described together with the corresponding sub components.
+of the main ORT configuration file. It consists of sections related to different subcomponents of ORT. The meaning
+of these sections and the properties they can contain is described together with the corresponding subcomponents.
 
 While the file is rather static, there are means to override configuration options for a specific run of ORT or to
 customize the configuration to a specific environment. The following options are supported, in order of precedence:
 
 * Properties can be defined via environment variables by using the full property path as the variable name.
   For instance, one can override the Postgres schema by setting 
-  `ort.scanner.storages.postgres.schema=test_schema`. The variable's name is case sensitive.
+  `ort.scanner.storages.postgres.schema=test_schema`. The variable's name is case-sensitive.
   Some programs like Bash do not support dots in variable names. For this case, the dots can be
   replaced by double underscores, i.e., the above example is turned into 
   `ort__scanner__storages__postgres__schema=test_schema`.
-* In addition to that, one can override the values of properties on the command line using the `-P` option. The option expects a
-  key-value pair. Again, the key must define the full path to the property to be overridden, e.g.
+* In addition to that, one can override the values of properties on the command line using the `-P` option. The option
+  expects a key-value pair. Again, the key must define the full path to the property to be overridden, e.g.
   `-P ort.scanner.storages.postgres.schema=test_schema`. The `-P` option can be repeated on the command
   line to override multiple properties.
 * Properties in the configuration file can reference environment variables using the syntax `${VAR}`.
@@ -226,40 +227,40 @@ customize the configuration to a specific environment. The following options are
 A list of copyright statements that are considered garbage, for example statements that were incorrectly classified as
 copyrights by the scanner.
 
-| Format | Scope | Default location |
-| ------ | ----- | ---------------- |
+| Format      | Scope  | Default location                        |
+|-------------|--------|-----------------------------------------|
 | YAML / JSON | Global | `$ORT_CONFIG_DIR/copyright-garbage.yml` |
 
 #### [Curations file](./docs/config-file-curations-yml.md)
 
 A file to correct invalid or missing package metadata, and to set the concluded license for packages.
 
-| Format | Scope | Default location |
-| ------ | ----- | ---------------- |
+| Format      | Scope  | Default location                |
+|-------------|--------|---------------------------------|
 | YAML / JSON | Global | `$ORT_CONFIG_DIR/curations.yml` |
 
 #### [Custom license texts dir](./docs/dir-custom-license-texts.md)
 
 A directory that contains license texts which are not provided by ORT.
 
-| Format | Scope | Default location |
-| ------ | ----- | ---------------- |
-| Text | Global | `$ORT_CONFIG_DIR/custom-license-texts/` |
+| Format | Scope  | Default location                        |
+|--------|--------|-----------------------------------------|
+| Text   | Global | `$ORT_CONFIG_DIR/custom-license-texts/` |
 
 #### [How to fix text provider script](./docs/how-to-fix-text-provider-kts.md)
 
-A Kotlin script that enables the injection of how-to-fix texts in markdown format for ORT issues into the reports.
+A Kotlin script that enables the injection of how-to-fix texts in Markdown format for ORT issues into the reports.
 
-| Format | Scope | Default location |
-| ------ | ----- | ---------------- |
+| Format        | Scope  | Default location                               |
+|---------------|--------|------------------------------------------------|
 | Kotlin script | Global | `$ORT_CONFIG_DIR/how-to-fix-text-provider.kts` |
 
 #### [License classifications file](docs/config-file-license-classifications-yml.md)
 
 A file that contains user-defined categorization of licenses.
 
-| Format | Scope | Default location |
-| ------ | ----- | ---------------- |
+| Format      | Scope  | Default location                              |
+|-------------|--------|-----------------------------------------------|
 | YAML / JSON | Global | `$ORT_CONFIG_DIR/license-classifications.yml` |
 
 #### [Resolution file](./docs/config-file-resolutions-yml.md)
@@ -267,8 +268,8 @@ A file that contains user-defined categorization of licenses.
 Configurations to resolve any issues or rule violations by providing a mandatory reason, and an optional comment to
 justify the resolution on a global scale.
 
-| Format | Scope | Default location |
-| ------ | ----- | ---------------- |
+| Format      | Scope  | Default location                  |
+|-------------|--------|-----------------------------------|
 | YAML / JSON | Global | `$ORT_CONFIG_DIR/resolutions.yml` |
 
 #### [Repository configuration file](./docs/config-file-ort-yml.md)
@@ -276,8 +277,8 @@ justify the resolution on a global scale.
 A configuration file, usually stored in the project's repository, for license finding curations, exclusions, and issues
 or rule violations resolutions in the context of the repository.
 
-| Format | Scope | Default location |
-| ------ | ----- | ---------------- |
+| Format      | Scope                | Default location                |
+|-------------|----------------------|---------------------------------|
 | YAML / JSON | Repository (project) | `[analyzer-input-dir]/.ort.yml` |
 
 #### [Package configuration file / directory](./docs/config-file-package-configuration-yml.md)
@@ -287,16 +288,16 @@ license finding curations for dependency packages to address issues found within
 [`package-config create` command](./helper-cli/src/main/kotlin/commands/packageconfig/CreateCommand.kt)
 can be used to populate a directory with template package configuration files.
 
-| Format | Scope | Default location |
-| ------ | ----- | ---------------- |
+| Format      | Scope                | Default location                          |
+|-------------|----------------------|-------------------------------------------|
 | YAML / JSON | Package (dependency) | `$ORT_CONFIG_DIR/package-configurations/` |
 
 #### [Policy rules file](./docs/file-rules-kts.md)
 
 The file containing any policy rule implementations to be used with the _evaluator_.
 
-| Format | Scope | Default location |
-| ------ | ----- |------------------|
+| Format              | Scope     | Default location                      |
+|---------------------|-----------|---------------------------------------|
 | Kotlin script (DSL) | Evaluator | `$ORT_CONFIG_DIR/evaluator.rules.kts` |
 
 # Details on the tools
@@ -326,56 +327,58 @@ supported:
   * [dep](https://golang.github.io/dep/)
   * [Glide](https://github.com/Masterminds/glide)
   * [Godep](https://github.com/tools/godep)
-  * [GoMod](https://github.com/golang/go/wiki/Modules) (limitations:
-  [no `replace` directive](https://github.com/oss-review-toolkit/ort/issues/4445))
+  * [GoMod](https://github.com/golang/go/wiki/Modules)
 * Haskell
   * [Stack](https://haskellstack.org/)
 * Java
   * [Gradle](https://gradle.org/)
   * [Maven](https://maven.apache.org/) (limitations:
-  [default profile only](https://github.com/oss-review-toolkit/ort/issues/1774))
+    [default profile only](https://github.com/oss-review-toolkit/ort/issues/1774))
 * JavaScript / Node.js
   * [Bower](https://bower.io/)
   * [NPM](https://www.npmjs.com/) (limitations:
-  [no scope-specific registries](https://github.com/oss-review-toolkit/ort/issues/3741),
-  [no peer dependencies](https://github.com/oss-review-toolkit/ort/issues/95))
+    [no peer dependencies](https://github.com/oss-review-toolkit/ort/issues/95))
+  * [PNPM](https://pnpm.io/) (limitations:
+    [no peer dependencies](https://github.com/oss-review-toolkit/ort/issues/95))
   * [Yarn 1](https://classic.yarnpkg.com/)
   * [Yarn 2+](https://next.yarnpkg.com/)
 * .NET
   * [DotNet](https://docs.microsoft.com/en-us/dotnet/core/tools/) (limitations:
-  [no floating versions / ranges](https://github.com/oss-review-toolkit/ort/pull/1303#issue-253860146),
-  [no target framework](https://github.com/oss-review-toolkit/ort/issues/4083))
+    [no floating versions / ranges](https://github.com/oss-review-toolkit/ort/pull/1303#issue-253860146),
+    [no target framework](https://github.com/oss-review-toolkit/ort/issues/4083))
   * [NuGet](https://www.nuget.org/) (limitations:
-  [no floating versions / ranges](https://github.com/oss-review-toolkit/ort/pull/1303#issue-253860146),
-  [no target framework](https://github.com/oss-review-toolkit/ort/issues/4083))
+    [no floating versions / ranges](https://github.com/oss-review-toolkit/ort/pull/1303#issue-253860146),
+    [no target framework](https://github.com/oss-review-toolkit/ort/issues/4083))
 * Objective-C / Swift
   * [Carthage](https://github.com/Carthage/Carthage) (limitation:
-  [no `cartfile.private`](https://github.com/oss-review-toolkit/ort/issues/3774))
+    [no `cartfile.private`](https://github.com/oss-review-toolkit/ort/issues/3774))
   * [CocoaPods](https://github.com/CocoaPods/CocoaPods) (limitations:
-  [no custom source repositories](https://github.com/oss-review-toolkit/ort/issues/4188))
+    [no custom source repositories](https://github.com/oss-review-toolkit/ort/issues/4188))
 * PHP
   * [Composer](https://getcomposer.org/)
 * Python
   * [PIP](https://pip.pypa.io/) (limitations:
-  [Python 2.7 or 3.8 and PIP 18.1 only](https://github.com/oss-review-toolkit/ort/issues/3671))
+    [Python 2.7 or 3.8 and PIP 18.1 only](https://github.com/oss-review-toolkit/ort/issues/3671))
   * [Pipenv](https://pipenv.pypa.io/en/latest/) (limitations:
-  [Python 2.7 or 3.8 and PIP 18.1 only](https://github.com/oss-review-toolkit/ort/issues/3671))
+    [Python 2.7 or 3.8 and PIP 18.1 only](https://github.com/oss-review-toolkit/ort/issues/3671))
+  * [Poetry](https://python-poetry.org/) (limitations:
+    [Python 2.7 or 3.8 and PIP 18.1 only](https://github.com/oss-review-toolkit/ort/issues/3671))
 * Ruby
   * [Bundler](https://bundler.io/) (limitations:
-  [restricted to the version available on the host](https://github.com/oss-review-toolkit/ort/issues/1308))
+    [restricted to the version available on the host](https://github.com/oss-review-toolkit/ort/issues/1308))
 * Rust
   * [Cargo](https://doc.rust-lang.org/cargo/)
 * Scala
   * [SBT](https://www.scala-sbt.org/)
 * Unmanaged
   * This is a special "package manager" that manages all files that cannot be associated to any of the other package
-  managers.
+    managers.
 
 <a name="analyzer-for-spdx-documents"></a>
 
 If another package manager that is not part of the list above is used (or no package manager at all), the generic
 fallback to [SPDX documents](https://spdx.dev/specifications/) can be leveraged to describe
-[projects](./analyzer/src/funTest/assets/projects/synthetic/spdx/project-xyz-with-inline-packages.spdx.yml) or
+[projects](./analyzer/src/funTest/assets/projects/synthetic/spdx/inline-packages/project-xyz.spdx.yml) or
 [packages](./analyzer/src/funTest/assets/projects/synthetic/spdx/libs/curl/package.spdx.yml).
 
 <a name="downloader">&nbsp;</a>
@@ -440,9 +443,9 @@ operation is considered successful if all writer storages could successfully per
 
 The configuration of storage backends is located in the [ORT configuration file](#ort-configuration-file). (For the
 general structure of this file and the set of options available refer to the
-[reference configuration](./model/src/main/resources/reference.conf).) The file has a section named _storages_ that lists
-all the storage backends and assigns them a name. Each storage backend is of a specific type and needs to be configured
-with type-specific properties. The different types of storage backends supported by ORT are described below.
+[reference configuration](./model/src/main/resources/reference.conf).) The file has a section named _storages_ that
+lists all the storage backends and assigns them a name. Each storage backend is of a specific type and needs to be
+configured with type-specific properties. The different types of storage backends supported by ORT are described below.
 
 After the declaration of the storage backends, the configuration file has to specify which ones of them the
 scanner should use for looking up existing scan results or to store new results. This is done in two list properties
@@ -548,7 +551,8 @@ ort {
 }
 ```
 
-The database needs to exist. If the schema is set to something else than the default of `public`, it needs to exist and be accessible by the configured username.
+The database needs to exist. If the schema is set to something else than the default of `public`, it needs to exist and
+be accessible by the configured username.
 
 The _scanner_ will itself create a table called `scan_results` and
 store the data in a [jsonb](https://www.postgresql.org/docs/current/datatype-json.html) column.
@@ -641,6 +645,24 @@ ort {
 
 To enable this provider, pass `-a VulnerableCode` on the command line.
 
+## OSV
+
+This provider obtains information about security vulnerabilities from Google [OSV](https://osv.dev/), a distributed
+vulnerability database for Open Source. The database aggregates data from different sources for various ecosystems. The
+configuration is optional and limited to overriding the server URL.
+
+```hocon
+ort {
+  advisor {
+    osv {
+      serverUrl = "https://api-staging.osv.dev"
+    }
+  }
+}
+```
+
+To enable this provider, pass `-a OSV` on the command line.
+
 <a name="evaluator">&nbsp;</a>
 
 [![Evaluator](./logos/evaluator.png)](./evaluator/src/main/kotlin)
@@ -658,8 +680,10 @@ The _reporter_ generates a wide variety of documents in different formats from O
 following formats are supported (reporter names are case-insensitive):
 
 * [AsciiDoc Template](docs/reporters/AsciiDocTemplateReporter.md) (`-f AsciiDocTemplate`)
-  * Content customizable with [Apache Freemarker](https://freemarker.apache.org/) templates and [AsciiDoc](https://asciidoc.org/)
-  * PDF style customizable with Asciidoctor [PDF themes](https://github.com/asciidoctor/asciidoctor-pdf/blob/master/docs/theming-guide.adoc)
+  * Content customizable with [Apache Freemarker](https://freemarker.apache.org/) templates and
+    [AsciiDoc](https://asciidoc.org/)
+  * PDF style customizable with Asciidoctor
+    [PDF themes](https://github.com/asciidoctor/asciidoctor-pdf/blob/master/docs/theming-guide.adoc)
   * Supports multiple AsciiDoc backends:
     * PDF (`-f PdfTemplate`)
     * HTML (`-f HtmlTemplate`)
@@ -669,16 +693,19 @@ following formats are supported (reporter names are case-insensitive):
     * AsciiDoc (`-f AdocTemplate`): Does not convert the created AsciiDoc files but writes the generated files as
       reports.
 * [ctrlX AUTOMATION](https://apps.boschrexroth.com/microsites/ctrlx-automation/) platform
-  [FOSS information](https://github.com/boschrexroth/json-schema/tree/master/ctrlx-automation/ctrlx-core/apps/fossinfo) (`-f CtrlXAutomation`)
+  [FOSS information](https://github.com/boschrexroth/json-schema/tree/master/ctrlx-automation/ctrlx-core/apps/fossinfo)
+  (`-f CtrlXAutomation`)
 * [CycloneDX](https://cyclonedx.org/) BOM (`-f CycloneDx`)
-* [Excel](https://products.office.com/excel) sheet (`-f Excel`)
-* [GitLabLicenseModel](https://docs.gitlab.com/ee/ci/pipelines/job_artifacts.html#artifactsreportslicense_scanning-ultimate) (`-f GitLabLicenseModel`)
+* [Excel](https://www.microsoft.com/en-us/microsoft-365/excel) sheet (`-f Excel`)
+* [GitLabLicenseModel](https://docs.gitlab.com/ee/ci/pipelines/job_artifacts.html#artifactsreportslicense_scanning-ultimate)
+  (`-f GitLabLicenseModel`)
   * A nice tutorial video has been [published](https://youtu.be/dNmH_kYJ34g) by GitLab engineer @mokhan.
 * [NOTICE](https://infra.apache.org/licensing-howto.html) file in two variants
   * List license texts and copyrights by package (`-f NoticeTemplate`)
   * Summarize all license texts and copyrights (`-f NoticeTemplate -O NoticeTemplate=template.id=summary`)
   * Customizable with [Apache Freemarker](https://freemarker.apache.org/) templates
-* Opossum input that can be visualized and edited in the [OpossumUI](https://github.com/opossum-tool/opossumUI)  (`-f Opossum`)
+* Opossum input that can be visualized and edited in the [OpossumUI](https://github.com/opossum-tool/opossumUI)
+  (`-f Opossum`)
 * [SPDX Document](https://spdx.dev/specifications/), version 2.2 (`-f SpdxDocument`)
 * Static HTML (`-f StaticHtml`)
 * Web App (`-f WebApp`)
@@ -687,7 +714,7 @@ following formats are supported (reporter names are case-insensitive):
 
 ORT is being continuously used on Linux, Windows and macOS by the
 [core development team](https://github.com/orgs/oss-review-toolkit/people), so these operating systems are
-considered to be well supported.
+considered to be well-supported.
 
 To run the ORT binaries (also see [Installation from binaries](#from-binaries)) at least Java 11 is required. Memory and
 CPU requirements vary depending on the size and type of project(s) to analyze / scan, but the general recommendation is
@@ -707,7 +734,7 @@ When developing on the command line, use the committed
 version and execute any given tasks. The most important tasks for this project are:
 
 | Task        | Purpose                                                           |
-| ----------- | ----------------------------------------------------------------- |
+|-------------|-------------------------------------------------------------------|
 | assemble    | Build the JAR artifacts for all projects                          |
 | detekt      | Run static code analysis on all projects                          |
 | test        | Run unit tests for all projects                                   |
@@ -738,14 +765,16 @@ created run configuration to your needs, e.g. by adding an argument and options 
 
 ## Testing
 
-For running tests and individual test cases from the IDE, the [kotest plugin](https://plugins.jetbrains.com/plugin/14080-kotest)
-needs to be installed. Afterwards tests can be run via the green "Play" icon from the gutter as described above.
+For running tests and individual test cases from the IDE, the
+[kotest plugin](https://plugins.jetbrains.com/plugin/14080-kotest) needs to be installed. Afterwards tests can be run
+via the green "Play" icon from the gutter as described above.
 
 # Want to Help or have Questions?
 
 All contributions are welcome. If you are interested in contributing, please read our
 [contributing guide](https://github.com/oss-review-toolkit/.github/blob/main/CONTRIBUTING.md), and to get quick answers
-to any of your questions we recommend you [join our Slack community](https://join.slack.com/t/ort-talk/shared_invite/enQtMzk3MDU5Njk0Njc1LThiNmJmMjc5YWUxZTU4OGI5NmY3YTFlZWM5YTliZmY5ODc0MGMyOWIwYmRiZWFmNGMzOWY2NzVhYTI0NTJkNmY).
+to any of your questions we recommend you
+[join our Slack community][2].
 
 # License
 
@@ -755,4 +784,5 @@ Copyright (C) 2020-2022 Bosch.IO GmbH
 
 See the [LICENSE](./LICENSE) file in the root of this project for license details.
 
-OSS Review Toolkit (ORT) is a [Linux Foundation project](https://www.linuxfoundation.org) and part of [ACT](https://automatecompliance.org/).
+OSS Review Toolkit (ORT) is a [Linux Foundation project](https://www.linuxfoundation.org) and part of
+[ACT](https://automatecompliance.org/).

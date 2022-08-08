@@ -49,7 +49,7 @@ import org.ossreviewtoolkit.model.utils.rawParam
 import org.ossreviewtoolkit.scanner.storages.utils.ScanResults
 import org.ossreviewtoolkit.utils.common.expandTilde
 import org.ossreviewtoolkit.utils.ort.ORT_CONFIG_FILENAME
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
 
 internal class DeleteCommand : CliktCommand(
@@ -106,11 +106,12 @@ internal class DeleteCommand : CliktCommand(
             val ids = database.transaction {
                 // language=PostgreSQL
                 """
-                SELECT id
-                FROM scan_storage.scan_results
-                WHERE (scan_result -> 'summary' -> 'licenses')::jsonb @> '[{"license": "$license"}]'::jsonb
+                SELECT ${ScanResults.id.name}
+                FROM ${ScanResults.tableName}
+                WHERE (${ScanResults.scanResult.name} -> 'summary' -> 'licenses')::jsonb @>
+                    '[{"license": "$license"}]'::jsonb
                 """.trimIndent().execAndMap {
-                    it.getInt("id")
+                    it.getInt(ScanResults.id.name)
                 }
             }
 
@@ -138,10 +139,10 @@ internal class DeleteCommand : CliktCommand(
 
             println("Would delete $count scan result(s).")
 
-            if (log.delegate.isDebugEnabled) {
+            if (logger.delegate.isDebugEnabled) {
                 database.transaction {
                     ScanResults.slice(ScanResults.identifier).select { condition }
-                        .forEach(this@DeleteCommand.log::debug)
+                        .forEach(this@DeleteCommand.logger::debug)
                 }
             }
         } else {
@@ -157,12 +158,13 @@ internal class DeleteCommand : CliktCommand(
         val storageConfig = config.scanner.storages?.get("postgresStorage") as? PostgresStorageConfiguration
             ?: throw IllegalArgumentException("postgresStorage not configured.")
 
-        log.info {
-            "Using Postgres storage with URL '${storageConfig.url}' and schema '${storageConfig.schema}'."
+        logger.info {
+            "Using Postgres storage with URL '${storageConfig.connection.url}' and schema " +
+                    "'${storageConfig.connection.schema}'."
         }
 
         val dataSource = DatabaseUtils.createHikariDataSource(
-            config = storageConfig,
+            config = storageConfig.connection,
             applicationNameSuffix = ORTH_NAME,
             maxPoolSize = 1
         )

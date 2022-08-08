@@ -21,6 +21,7 @@
 package org.ossreviewtoolkit.analyzer.managers
 
 import io.kotest.core.spec.style.WordSpec
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 import io.kotest.matchers.string.haveSubstring
@@ -29,6 +30,7 @@ import java.io.File
 
 import org.ossreviewtoolkit.analyzer.Analyzer
 import org.ossreviewtoolkit.downloader.VersionControlSystem
+import org.ossreviewtoolkit.model.AnalyzerResult
 import org.ossreviewtoolkit.model.Hash
 import org.ossreviewtoolkit.model.HashAlgorithm
 import org.ossreviewtoolkit.model.OrtResult
@@ -36,9 +38,7 @@ import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.utils.ort.normalizeVcsUrl
 import org.ossreviewtoolkit.utils.test.DEFAULT_ANALYZER_CONFIGURATION
 import org.ossreviewtoolkit.utils.test.DEFAULT_REPOSITORY_CONFIGURATION
-import org.ossreviewtoolkit.utils.test.NoDockerTag
 import org.ossreviewtoolkit.utils.test.USER_DIR
-import org.ossreviewtoolkit.utils.test.patchActualResult
 import org.ossreviewtoolkit.utils.test.patchExpectedResult
 
 class PubFunTest : WordSpec() {
@@ -63,8 +63,6 @@ class PubFunTest : WordSpec() {
                     val vcsPath = vcsDir.getPathToRoot(workingDir)
                     val expectedResult = patchExpectedResult(
                         expectedResultFile,
-                        custom = mapOf("pub-project" to "pub-${workingDir.name}"),
-                        definitionFilePath = "$vcsPath/pubspec.yaml",
                         url = normalizeVcsUrl(vcsUrl),
                         revision = vcsRevision,
                         path = vcsPath
@@ -85,8 +83,6 @@ class PubFunTest : WordSpec() {
                 val vcsPath = vcsDir.getPathToRoot(workingDir)
                 val expectedResult = patchExpectedResult(
                     expectedResultFile,
-                    custom = mapOf("pub-project" to "pub-${workingDir.name}"),
-                    definitionFilePath = "$vcsPath/pubspec.yaml",
                     url = normalizeVcsUrl(vcsUrl),
                     revision = vcsRevision,
                     path = vcsPath
@@ -95,7 +91,28 @@ class PubFunTest : WordSpec() {
                 result.toYaml() shouldBe expectedResult
             }
 
-            "resolve dependencies for a project with Flutter, Android and Cocoapods".config(tags = setOf(NoDockerTag)) {
+            "resolve multi-module dependencies correctly" {
+                val workingDir = projectsDir.resolve("multi-module")
+                val expectedResultFile = projectsDir.parentFile.resolve("pub-expected-output-multi-module.yml")
+
+                val analyzer = Analyzer(DEFAULT_ANALYZER_CONFIGURATION)
+                val managedFiles = analyzer.findManagedFiles(workingDir)
+
+                val analyzerRun = analyzer.analyze(managedFiles).patchAapt2Result().analyzer
+                val analyzerResult = analyzerRun.shouldNotBeNull().result.withResolvedScopes()
+
+                val vcsPath = vcsDir.getPathToRoot(workingDir)
+                val expectedResult = patchExpectedResult(
+                    expectedResultFile,
+                    url = normalizeVcsUrl(vcsUrl),
+                    revision = vcsRevision,
+                    path = vcsPath
+                )
+
+                analyzerResult.toYaml() shouldBe expectedResult
+            }
+
+            "resolve dependencies for a project with Flutter, Android and Cocoapods" {
                 val workingDir = projectsDir.resolve("flutter-project-with-android-and-cocoapods")
                 val expectedResultFile =
                     projectsDir.parentFile.resolve("pub-expected-output-with-flutter-android-and-cocoapods.yml")
@@ -103,18 +120,28 @@ class PubFunTest : WordSpec() {
                 val analyzer = Analyzer(DEFAULT_ANALYZER_CONFIGURATION)
                 val managedFiles = analyzer.findManagedFiles(workingDir)
 
-                val analyzerResult = analyzer.analyze(managedFiles).patchAapt2Result()
+                val analyzerRun = analyzer.analyze(managedFiles).patchAapt2Result().analyzer
+                val analyzerResult = analyzerRun.shouldNotBeNull().result.withResolvedScopes()
+                val project = analyzerResult.projects
+                    .single { it.id.type == "Pub" }
+                val projectDependencies = project.scopes.flatMap { it.collectDependencies() }
+
+                // Reduce the analyzer result to only the Pub project and its dependencies.
+                val reducedAnalyzerResult = AnalyzerResult(
+                    projects = sortedSetOf(project),
+                    packages = analyzerResult.packages.filterTo(sortedSetOf()) { it.pkg.id in projectDependencies },
+                    issues = analyzerResult.issues
+                )
 
                 val vcsPath = vcsDir.getPathToRoot(workingDir)
                 val expectedResult = patchExpectedResult(
                     expectedResultFile,
-                    url = vcsUrl,
-                    urlProcessed = normalizeVcsUrl(vcsUrl),
+                    url = normalizeVcsUrl(vcsUrl),
                     revision = vcsRevision,
                     path = vcsPath
                 )
 
-                patchActualResult(analyzerResult, true) shouldBe expectedResult
+                reducedAnalyzerResult.toYaml() shouldBe expectedResult
             }
 
             "show an error if no lockfile is present" {

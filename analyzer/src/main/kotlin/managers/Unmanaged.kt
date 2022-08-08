@@ -32,7 +32,7 @@ import org.ossreviewtoolkit.model.VcsType
 import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.utils.parseRepoManifestPath
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 
 /**
  * A fake [PackageManager] for projects that do not use any of the known package managers, or no package manager at all.
@@ -68,18 +68,16 @@ class Unmanaged(
         val id = when {
             vcsInfo == VcsInfo.EMPTY -> {
                 // This seems to be an analysis of a local directory that is not under version control, i.e. that is not
-                // a VCS working tree. In this case we have no change to get a version.
-                val projectDir = definitionFile
-
-                log.warn {
-                    "Analysis of local directory '$projectDir' which is not under version control will produce " +
+                // a VCS working tree. In this case we have no chance to get a version.
+                logger.warn {
+                    "Analysis of local directory '$definitionFile' which is not under version control will produce " +
                             "non-cacheable results as no version for the cache key can be determined."
                 }
 
                 Identifier(
                     type = managerName,
                     namespace = "",
-                    name = projectDir.name,
+                    name = definitionFile.name,
                     version = ""
                 )
             }

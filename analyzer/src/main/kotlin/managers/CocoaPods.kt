@@ -56,7 +56,7 @@ import org.ossreviewtoolkit.model.yamlMapper
 import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.stashDirectories
 import org.ossreviewtoolkit.utils.common.textValueOrEmpty
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 
 /**
  * The [CocoaPods](https://cocoapods.org/) package manager for Objective-C.
@@ -66,7 +66,7 @@ import org.ossreviewtoolkit.utils.ort.log
  * on any platform. Note that obtaining the dependency tree from the 'pod' command without a lock file has Xcode
  * dependencies and is not supported by this class.
  *
- * The only interactions with the 'pod' command happen in order to obtain metadata for dependencies. Therefore
+ * The only interactions with the 'pod' command happen in order to obtain metadata for dependencies. Therefore,
  * 'pod spec which' gets executed, which works also under Linux.
  */
 class CocoaPods(
@@ -89,7 +89,7 @@ class CocoaPods(
 
     override fun command(workingDir: File?) = "pod"
 
-    override fun getVersionRequirement() = Requirement.buildIvy("[1.11.0,)")
+    override fun getVersionRequirement(): Requirement = Requirement.buildIvy("[1.11.0,)")
 
     override fun getVersionArguments() = "--version --allow-root"
 
@@ -170,7 +170,7 @@ class CocoaPods(
 
     private fun getPackage(id: Identifier, workingDir: File): Package {
         val podspec = getPodspec(id, workingDir) ?: run {
-            log.warn { "Could not find a '.podspec' file for package '${id.toCoordinates()}'." }
+            logger.warn { "Could not find a '.podspec' file for package '${id.toCoordinates()}'." }
 
             return Package.EMPTY.copy(id = id)
         }

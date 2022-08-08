@@ -28,6 +28,7 @@ import com.github.ajalt.clikt.core.requireObject
 import com.github.ajalt.clikt.parameters.options.associate
 import com.github.ajalt.clikt.parameters.options.convert
 import com.github.ajalt.clikt.parameters.options.default
+import com.github.ajalt.clikt.parameters.options.deprecated
 import com.github.ajalt.clikt.parameters.options.flag
 import com.github.ajalt.clikt.parameters.options.option
 import com.github.ajalt.clikt.parameters.options.required
@@ -37,6 +38,7 @@ import com.github.ajalt.clikt.parameters.types.file
 
 import org.ossreviewtoolkit.analyzer.Analyzer
 import org.ossreviewtoolkit.analyzer.PackageManager
+import org.ossreviewtoolkit.analyzer.PackageManagerFactory
 import org.ossreviewtoolkit.analyzer.curation.ClearlyDefinedPackageCurationProvider
 import org.ossreviewtoolkit.analyzer.curation.CompositePackageCurationProvider
 import org.ossreviewtoolkit.analyzer.curation.FallbackPackageCurationProvider
@@ -51,6 +53,7 @@ import org.ossreviewtoolkit.cli.utils.inputGroup
 import org.ossreviewtoolkit.cli.utils.outputGroup
 import org.ossreviewtoolkit.cli.utils.writeOrtResult
 import org.ossreviewtoolkit.model.FileFormat
+import org.ossreviewtoolkit.model.config.AnalyzerConfiguration
 import org.ossreviewtoolkit.model.config.RepositoryConfiguration
 import org.ossreviewtoolkit.model.readValueOrNull
 import org.ossreviewtoolkit.model.utils.DefaultResolutionProvider
@@ -61,13 +64,13 @@ import org.ossreviewtoolkit.utils.ort.ORT_PACKAGE_CURATIONS_DIRNAME
 import org.ossreviewtoolkit.utils.ort.ORT_PACKAGE_CURATIONS_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_REPO_CONFIG_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_RESOLUTIONS_FILENAME
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
 
-class AnalyzerCommand : CliktCommand(name = "analyze", help = "Determine dependencies of a software project.") {
-    private val allPackageManagersByName = PackageManager.ALL.associateBy { it.managerName }
-        .toSortedMap(String.CASE_INSENSITIVE_ORDER)
+private val allPackageManagersByName = PackageManager.ALL.associateBy { it.managerName }
+    .toSortedMap(String.CASE_INSENSITIVE_ORDER)
 
+class AnalyzerCommand : CliktCommand(name = "analyze", help = "Determine dependencies of a software project.") {
     private val inputDir by option(
         "--input-dir", "-i",
         help = "The project directory to analyze. As a special case, if only one package manager is activated, this " +
@@ -152,20 +155,30 @@ class AnalyzerCommand : CliktCommand(name = "analyze", help = "Determine depende
     private val activatedPackageManagers by option(
         "--package-managers", "-m",
         help = "The comma-separated package managers to activate, any of ${allPackageManagersByName.keys}. Note that " +
-                "deactivation overrides activation."
+                "deactivation overrides activation. If set, package manager activation settings from configuration " +
+                "files are ignored."
     ).convert { name ->
         allPackageManagersByName[name]
             ?: throw BadParameterValue("Package managers must be one or more of ${allPackageManagersByName.keys}.")
-    }.split(",").default(PackageManager.ALL.toList())
+    }.split(",").deprecated(
+        message = "--package-managers is deprecated, use -P ort.analyzer.enabledPackageManagers=... on the ort " +
+                "command instead.",
+        tagValue = "use -P ort.analyzer.enabledPackageManagers=... on the ort command instead"
+    )
 
     private val deactivatedPackageManagers by option(
         "--not-package-managers", "-n",
         help = "The comma-separated package managers to deactivate, any of ${allPackageManagersByName.keys}. Note " +
-                "that deactivation overrides activation."
+                "that deactivation overrides activation. If set, package manager activation settings from " +
+                "configuration files are ignored."
     ).convert { name ->
         allPackageManagersByName[name]
             ?: throw BadParameterValue("Package managers must be one or more of ${allPackageManagersByName.keys}.")
-    }.split(",").default(emptyList())
+    }.split(",").deprecated(
+        message = "--not-package-managers is deprecated, use -P ort.analyzer.disabledPackageManagers=... on the ort " +
+                "command instead.",
+        tagValue = "use -P ort.analyzer.disabledPackageManagers=... on the ort command instead"
+    )
 
     private val globalOptionsForSubcommands by requireObject<GlobalOptions>()
 
@@ -200,17 +213,26 @@ class AnalyzerCommand : CliktCommand(name = "analyze", help = "Determine depende
         println("Looking for analyzer-specific configuration in the following files and directories:")
         println("\t" + configurationInfo)
 
-        val distinctPackageManagers = activatedPackageManagers.toSet() - deactivatedPackageManagers.toSet()
-        println("The following package managers are activated:")
-        println("\t" + distinctPackageManagers.joinToString())
+        val config = globalOptionsForSubcommands.config
+
+        val enabledPackageManagers = if (activatedPackageManagers != null || deactivatedPackageManagers != null) {
+            (activatedPackageManagers?.toSet() ?: PackageManager.ALL) - deactivatedPackageManagers.orEmpty().toSet()
+        } else {
+            config.analyzer.determineEnabledPackageManagers()
+        }
+
+        println("The following package managers are enabled:")
+        println("\t" + enabledPackageManagers.joinToString())
 
         println("Analyzing project path:\n\t$inputDir")
 
-        val config = globalOptionsForSubcommands.config
-        val analyzer = Analyzer(config.analyzer, labels)
-
         val repositoryConfiguration = actualRepositoryConfigurationFile.takeIf { it.isFile }?.readValueOrNull()
             ?: RepositoryConfiguration()
+
+        val analyzerConfiguration =
+            repositoryConfiguration.analyzer?.let { config.analyzer.merge(it) } ?: config.analyzer
+
+        val analyzer = Analyzer(analyzerConfiguration, labels)
 
         val defaultCurationProviders = buildList {
             if (useOrtCurations) add(OrtConfigPackageCurationProvider())
@@ -222,7 +244,7 @@ class AnalyzerCommand : CliktCommand(name = "analyze", help = "Determine depende
             if (config.enableRepositoryPackageCurations) {
                 add(SimplePackageCurationProvider(repositoryPackageCurations))
             } else if (repositoryPackageCurations.isNotEmpty()) {
-                log.warn {
+                this@AnalyzerCommand.logger.warn {
                     "Existing package curations from '$ORT_REPO_CONFIG_FILENAME' are not applied because the feature " +
                             "is disabled."
                 }
@@ -239,7 +261,7 @@ class AnalyzerCommand : CliktCommand(name = "analyze", help = "Determine depende
 
         val curationProvider = FallbackPackageCurationProvider(curationProviders)
 
-        val info = analyzer.findManagedFiles(inputDir, distinctPackageManagers, repositoryConfiguration)
+        val info = analyzer.findManagedFiles(inputDir, enabledPackageManagers, repositoryConfiguration)
         if (info.managedFiles.isEmpty()) {
             println("No definition files found.")
         } else {
@@ -285,4 +307,11 @@ class AnalyzerCommand : CliktCommand(name = "analyze", help = "Determine depende
 
         severityStats.print().conclude(config.severeIssueThreshold, 2)
     }
+}
+
+private fun AnalyzerConfiguration.determineEnabledPackageManagers(): Set<PackageManagerFactory> {
+    val enabled = enabledPackageManagers?.mapNotNull { allPackageManagersByName[it] }?.toSet() ?: PackageManager.ALL
+    val disabled = disabledPackageManagers?.mapNotNull { allPackageManagersByName[it] }?.toSet().orEmpty()
+
+    return enabled - disabled
 }

@@ -40,7 +40,7 @@ import org.ossreviewtoolkit.utils.common.isSymbolicLink
 import org.ossreviewtoolkit.utils.common.realFile
 import org.ossreviewtoolkit.utils.common.searchUpwardsForSubdirectory
 import org.ossreviewtoolkit.utils.common.withoutPrefix
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
 /**
@@ -154,7 +154,7 @@ class GitRepo : VersionControlSystem(), CommandLineTool {
             manifestPath?.let { listOf("-m", it) }
         ).flatten()
 
-        log.info {
+        logger.info {
             val revisionDetails = manifestRevision?.let { " with revision '$it'" }.orEmpty()
             val pathDetails = manifestPath?.let { " using manifest '$it'" }.orEmpty()
             "Initializing git-repo from $repoUrl$revisionDetails$pathDetails."
@@ -194,7 +194,7 @@ class GitRepo : VersionControlSystem(), CommandLineTool {
             // Switching manifest branches / revisions requires running "init" again.
             runRepo(workingTree.workingDir, "init", *manifestOptions.toTypedArray())
 
-            // Repo allows to checkout Git repositories to nested directories. If a manifest is badly configured, a
+            // Repo allows to check out Git repositories to nested directories. If a manifest is badly configured, a
             // nested Git checkout overwrites files in a directory of the upper-level Git repository. However, we still
             // want to be able to download such projects, so specify "--force-sync" to work around that issue.
             val syncArgs = mutableListOf("sync", "-c", "--force-sync")
@@ -203,11 +203,11 @@ class GitRepo : VersionControlSystem(), CommandLineTool {
 
             runRepo(workingTree.workingDir, *syncArgs.toTypedArray())
 
-            log.debug { runRepo(workingTree.workingDir, "info").stdout }
+            logger.debug { runRepo(workingTree.workingDir, "info").stdout }
         }.onFailure { e ->
             e.showStackTrace()
 
-            log.warn {
+            logger.warn {
                 val revisionDetails = manifestRevision?.let { " to revision '$it'" }.orEmpty()
                 val pathDetails = manifestPath?.let { " using manifest '$it'" }.orEmpty()
                 "Failed to sync the working tree$revisionDetails$pathDetails: ${e.collectMessages()}"

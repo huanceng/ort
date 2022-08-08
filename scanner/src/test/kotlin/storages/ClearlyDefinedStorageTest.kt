@@ -46,6 +46,8 @@ import io.kotest.matchers.string.shouldContain
 import java.io.File
 import java.net.ServerSocket
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 
 import org.ossreviewtoolkit.clients.clearlydefined.ClearlyDefinedService
@@ -162,7 +164,7 @@ private fun stubHarvestToolResponse(server: WireMockServer, coordinates: Coordin
 }
 
 /**
- * Stub a request for the definitions endpoint for the given [coordinates] on the [server] server.
+ * Stub a request for the definition's endpoint for the given [coordinates] on the [server] server.
  */
 private fun stubDefinitions(server: WireMockServer, coordinates: Coordinates = COORDINATES) {
     val coordinatesList = listOf(coordinates)
@@ -412,7 +414,7 @@ class ClearlyDefinedStorageTest : WordSpec({
 
         "return a failure if the connection to the server fails" {
             // Find a port on which no service is running.
-            val port = ServerSocket(0).use { it.localPort }
+            val port = withContext(Dispatchers.IO) { ServerSocket(0).use { it.localPort } }
             val serverUrl = "http://localhost:$port"
 
             val storage = ClearlyDefinedStorage(ClearlyDefinedStorageConfiguration((serverUrl)))

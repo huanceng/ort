@@ -60,11 +60,23 @@ import org.ossreviewtoolkit.utils.common.collectMessages
 import org.ossreviewtoolkit.utils.common.textValueOrEmpty
 import org.ossreviewtoolkit.utils.ort.HttpDownloadError
 import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
+/**
+ * The path to the helper script resource that resolves a `Gemfile`'s top-level dependencies with group information.
+ */
 private const val ROOT_DEPENDENCIES_SCRIPT = "scripts/bundler_root_dependencies.rb"
+
+/**
+ * The path to the helper script resource that resolves a `Gemfile`'s dependencies.
+ */
 private const val RESOLVE_DEPENDENCIES_SCRIPT = "scripts/bundler_resolve_dependencies.rb"
+
+/**
+ * Gems that the helper scripts depend upon.
+ */
+private val HELPER_SCRIPT_DEPENDENCIES = listOf("bundler")
 
 private fun runScriptResource(resource: String, workingDir: File): String {
     val bytes = ByteArrayOutputStream()
@@ -104,9 +116,6 @@ class Bundler(
     }
 
     override fun beforeResolution(definitionFiles: List<File>) {
-        // Install the Gems the helper scripts depend on.
-        val requiredGems = listOf("bundler")
-
         val gemHome = Os.env["GEM_HOME"]?.let { File(it) } ?: Os.userHomeDirectory.resolve(".gem")
         val jrubyGems = gemHome.resolve("jruby/${Constants.RUBY_MAJOR_VERSION}.0/gems")
         val bundlerGems = jrubyGems.walk().maxDepth(1).filter {
@@ -115,16 +124,20 @@ class Bundler(
             it.name.substringBeforeLast('-')
         }
 
-        if (bundlerGems.containsAll(requiredGems)) {
-            log.info { "Already installed the ${requiredGems.joinToString()} gem(s)." }
+        if (bundlerGems.containsAll(HELPER_SCRIPT_DEPENDENCIES)) {
+            logger.info { "Already installed the ${HELPER_SCRIPT_DEPENDENCIES.joinToString()} gem(s)." }
         } else {
+            // Install the Gems the helper scripts depend on.
             val duration = measureTime {
                 org.jruby.Main().run(
-                    arrayOf("-S", "gem", "install", "--no-document", "--user-install", *requiredGems.toTypedArray())
+                    arrayOf(
+                        "-S", "gem", "install", "--no-document", "--user-install",
+                        *HELPER_SCRIPT_DEPENDENCIES.toTypedArray()
+                    )
                 )
             }
 
-            log.info { "Installing the ${requiredGems.joinToString()} gem(s) took $duration." }
+            logger.info { "Installing the ${HELPER_SCRIPT_DEPENDENCIES.joinToString()} gem(s) took $duration." }
         }
     }
 
@@ -141,7 +154,7 @@ class Bundler(
             val projectId = Identifier(managerName, "", name, version)
             val groupedDeps = getDependencyGroups(workingDir)
 
-            for ((groupName, dependencyList) in groupedDeps) {
+            groupedDeps.forEach { (groupName, dependencyList) ->
                 parseScope(workingDir, projectId, groupName, dependencyList, scopes, gemSpecs, issues)
             }
 
@@ -156,7 +169,13 @@ class Bundler(
                 scopeDependencies = scopes.toSortedSet()
             )
 
-            val packages = gemSpecs.values.mapTo(sortedSetOf()) { getPackageFromGemspec(it) }
+            val allProjectDeps = groupedDeps.values.flatten().toSet()
+            val helperOnlyDeps = HELPER_SCRIPT_DEPENDENCIES.filterNot { it in allProjectDeps }
+
+            val packages = gemSpecs.values.mapNotNullTo(sortedSetOf()) { gemSpec ->
+                getPackageFromGemspec(gemSpec).takeUnless { gemSpec.name in helperOnlyDeps }
+            }
+
             listOf(ProjectAnalyzerResult(project, packages, issues))
         }
     }
@@ -165,7 +184,10 @@ class Bundler(
         workingDir: File, projectId: Identifier, groupName: String, dependencyList: List<String>,
         scopes: MutableSet<Scope>, gemSpecs: MutableMap<String, GemSpec>, issues: MutableList<OrtIssue>
     ) {
-        log.debug { "Parsing scope: $groupName\nscope top level deps list=$dependencyList" }
+        logger.debug {
+            "Parsing scope '$groupName' with top-level dependencies $dependencyList for project " +
+                    "'${projectId.toCoordinates()}' in '$workingDir'."
+        }
 
         val scopeDependencies = mutableSetOf<PackageReference>()
 
@@ -180,7 +202,7 @@ class Bundler(
         workingDir: File, projectId: Identifier, gemName: String, gemSpecs: MutableMap<String, GemSpec>,
         scopeDependencies: MutableSet<PackageReference>, issues: MutableList<OrtIssue>
     ) {
-        log.debug { "Parsing dependency '$gemName'." }
+        logger.debug { "Parsing dependency '$gemName'." }
 
         runCatching {
             val gemSpec = gemSpecs.getValue(gemName)
@@ -211,7 +233,8 @@ class Bundler(
 
             issues += createAndLogIssue(
                 source = managerName,
-                message = "Failed to parse dependency '$gemName': ${it.collectMessages()}"
+                message = "Failed to parse dependency '$gemName' of project '${projectId.toCoordinates()}' in " +
+                        "'$workingDir': ${it.collectMessages()}"
             )
         }
     }
@@ -229,15 +252,6 @@ class Bundler(
         }.associateByTo(mutableMapOf()) {
             it.name
         }
-
-        // Bundler itself always shows up as a dependency because the helper script requires it, but it should be
-        // removed unless it actually is a runtime dependency.
-        val isBundlerARuntimeDependency = gemSpecs.values.any { gemspec ->
-            gemspec.runtimeDependencies.any { name ->
-                name.startsWith("bundler")
-            }
-        }
-        if (!isBundlerARuntimeDependency) gemSpecs.remove("bundler")
 
         return gemSpecs
     }
@@ -285,12 +299,12 @@ class Bundler(
             GemSpec.createFromGem(yamlMapper.readTree(it))
         }.onFailure {
             val error = (it as? HttpDownloadError) ?: run {
-                log.warn { "Unable to retrieve metadata for gem '$name' from RubyGems: ${it.message}" }
+                logger.warn { "Unable to retrieve metadata for gem '$name' from RubyGems: ${it.message}" }
                 return null
             }
 
             when (error.code) {
-                HttpURLConnection.HTTP_NOT_FOUND -> log.info { "Gem '$name' was not found on RubyGems." }
+                HttpURLConnection.HTTP_NOT_FOUND -> logger.info { "Gem '$name' was not found on RubyGems." }
 
                 OkHttpClientHelper.HTTP_TOO_MANY_REQUESTS -> {
                     throw IOException(

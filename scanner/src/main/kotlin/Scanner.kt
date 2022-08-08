@@ -40,7 +40,7 @@ import org.ossreviewtoolkit.model.config.Options
 import org.ossreviewtoolkit.model.config.ScannerConfiguration
 import org.ossreviewtoolkit.model.utils.filterByProject
 import org.ossreviewtoolkit.utils.ort.Environment
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 
 const val TOOL_NAME = "scanner"
 
@@ -49,7 +49,7 @@ private fun removeConcludedPackages(packages: Set<Package>, scanner: Scanner): S
         // Remove all packages that have a concluded license and authors set.
         ?: packages.partition { it.concludedLicense != null && it.authors.isNotEmpty() }.let { (skip, keep) ->
             if (skip.isNotEmpty()) {
-                scanner.log.debug { "Not scanning the following packages with concluded licenses: $skip" }
+                scanner.logger.debug { "Not scanning the following packages with concluded licenses: $skip" }
             }
 
             keep.toSet()
@@ -83,8 +83,16 @@ fun scanOrtResult(
         "At least one scanner must be specified."
     }
 
+    // Note: Currently, each scanner gets its own reference to the whole scanner configuration, which includes the
+    // options for all scanners.
+    if (packageScanner != null && projectScanner != null) {
+        check(packageScanner.scannerConfig === projectScanner.scannerConfig) {
+            "The package and project scanners need to refer to the same global scanner configuration."
+        }
+    }
+
     if (ortResult.analyzer == null) {
-        Scanner.log.warn {
+        Scanner.logger.warn {
             "Cannot run the scanner as the provided ORT result does not contain an analyzer result. " +
                     "No result will be added."
         }
@@ -150,12 +158,6 @@ fun scanOrtResult(
     }
 
     val endTime = Instant.now()
-
-    // Note: Currently, each scanner gets its own reference to the whole scanner configuration, which includes the
-    // options for all scanners.
-    check(packageScanner?.scannerConfig === projectScanner?.scannerConfig) {
-        "The package and project scanners need to refer to the same global scanner configuration."
-    }
 
     val filteredScannerOptions = mutableMapOf<String, Options>()
 

@@ -22,13 +22,16 @@ package org.ossreviewtoolkit.analyzer.managers
 import io.kotest.core.spec.style.WordSpec
 import io.kotest.matchers.collections.containExactly
 import io.kotest.matchers.collections.containExactlyInAnyOrder
+import io.kotest.matchers.collections.shouldContainExactlyInAnyOrder
 import io.kotest.matchers.collections.shouldHaveSize
 import io.kotest.matchers.maps.haveSize
+import io.kotest.matchers.nulls.shouldNotBeNull
 import io.kotest.matchers.should
 import io.kotest.matchers.shouldBe
 
 import java.io.File
 
+import org.ossreviewtoolkit.analyzer.Analyzer
 import org.ossreviewtoolkit.downloader.VersionControlSystem
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.Project
@@ -46,10 +49,11 @@ import org.ossreviewtoolkit.utils.test.shouldNotBeNull
 class SpdxDocumentFileFunTest : WordSpec({
     "resolveDependencies()" should {
         "succeed if a project with inline packages is provided" {
-            val definitionFile = projectDir.resolve("project-xyz-with-inline-packages.spdx.yml")
+            val definitionFile = projectDir.resolve("inline-packages/project-xyz.spdx.yml")
             val expectedResult = patchExpectedResult(
                 projectDir.resolveSibling("spdx-project-xyz-expected-output.yml"),
                 definitionFilePath = vcsDir.getPathToRoot(definitionFile),
+                path = vcsDir.getPathToRoot(definitionFile.parentFile),
                 url = vcsUrl,
                 urlProcessed = normalizeVcsUrl(vcsUrl),
                 revision = vcsRevision
@@ -61,10 +65,11 @@ class SpdxDocumentFileFunTest : WordSpec({
         }
 
         "succeed if a project with package references is provided" {
-            val definitionFile = projectDir.resolve("project-xyz-with-package-references.spdx.yml")
+            val definitionFile = projectDir.resolve("package-references/project-xyz.spdx.yml")
             val expectedResult = patchExpectedResult(
                 projectDir.resolveSibling("spdx-project-xyz-expected-output.yml"),
                 definitionFilePath = vcsDir.getPathToRoot(definitionFile),
+                path = vcsDir.getPathToRoot(definitionFile.parentFile),
                 url = vcsUrl,
                 urlProcessed = normalizeVcsUrl(vcsUrl),
                 revision = vcsRevision
@@ -163,7 +168,7 @@ class SpdxDocumentFileFunTest : WordSpec({
             val idZlib = Identifier("SpdxDocumentFile::zlib:1.2.11")
             val idMyLib = Identifier("SpdxDocumentFile::my-lib:8.88.8")
 
-            val projectFile = projectDir.resolve("project-xyz-with-transitive-dependencies.spdx.yml")
+            val projectFile = projectDir.resolve("transitive-dependencies/project-xyz.spdx.yml")
             val definitionFiles = listOf(projectFile)
 
             val result = createSpdxDocumentFile().resolveDependencies(definitionFiles, emptyMap())
@@ -185,11 +190,31 @@ class SpdxDocumentFileFunTest : WordSpec({
                 }
             }
         }
+
+        "resolve dependencies from other package managers" {
+            val testProjectDir = projectDir.resolve("subproject-conan")
+            val definitionFile = testProjectDir.resolve("project-xyz.spdx.yml")
+            val expectedResult = patchExpectedResult(
+                projectDir.resolveSibling("spdx-project-xyz-expected-output-subproject-conan.yml"),
+                definitionFilePath = vcsDir.getPathToRoot(definitionFile),
+                url = vcsUrl,
+                urlProcessed = normalizeVcsUrl(vcsUrl),
+                revision = vcsRevision
+            )
+
+            val analyzer = Analyzer(DEFAULT_ANALYZER_CONFIGURATION)
+            val managedFiles = analyzer.findManagedFiles(testProjectDir)
+
+            val analyzerRun = analyzer.analyze(managedFiles).analyzer.shouldNotBeNull()
+            val analyzerResult = analyzerRun.result.withResolvedScopes()
+
+            analyzerResult.toYaml() shouldBe expectedResult
+        }
     }
 
     "mapDefinitionFiles()" should {
         "remove SPDX documents that do not describe a project if a project file is provided" {
-            val projectFile = projectDir.resolve("project-xyz-with-package-references.spdx.yml")
+            val projectFile = projectDir.resolve("package-references/project-xyz.spdx.yml")
             val packageFile = projectDir.resolve("libs/curl/package.spdx.yml")
 
             val definitionFiles = listOf(projectFile, packageFile)
@@ -211,6 +236,29 @@ class SpdxDocumentFileFunTest : WordSpec({
         }
 
         // TODO: Test that we can read in files written by SpdxDocumentReporter.
+    }
+
+    "createPackageManagerResult" should {
+        "not include subproject dependencies as packages" {
+            val projectFile = projectDir.resolve("subproject-dependencies/project-xyz.spdx.yml")
+            val subProjectFile = projectDir.resolve("subproject-dependencies/subproject/subproject-xyz.spdx.yml")
+            val definitionFiles = listOf(projectFile, subProjectFile)
+
+            val result = createSpdxDocumentFile().resolveDependencies(definitionFiles, emptyMap())
+            val projectResults = result.projectResults.values.flatten()
+            val projectIds = projectResults.map { it.project.id }
+            val packageIds = projectResults.flatMap { projResult -> projResult.packages.map { it.id } }
+
+            projectIds shouldContainExactlyInAnyOrder listOf(
+                Identifier("SpdxDocumentFile::xyz:0.1.0"),
+                Identifier("SpdxDocumentFile::subproject-xyz:0.1.0")
+            )
+            packageIds shouldContainExactlyInAnyOrder listOf(
+                Identifier("SpdxDocumentFile::curl:7.70.0"),
+                Identifier("SpdxDocumentFile::my-lib:8.88.8"),
+                Identifier("SpdxDocumentFile:OpenSSL Development Team:openssl:1.1.1g")
+            )
+        }
     }
 })
 

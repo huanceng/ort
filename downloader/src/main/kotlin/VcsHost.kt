@@ -96,6 +96,11 @@ enum class VcsHost(
             return "https://dev.azure.com/$userOrOrg/$team/_apis/git/repositories/$project/items" +
                     "?scopePath=/${vcsInfo.path}"
         }
+
+        /**
+         * Return whether [url] is a VCS URI for Azure DevOps. URIs referencing an artifacts feed are excluded.
+         */
+        override fun isApplicable(url: URI): Boolean = super.isApplicable(url) && url.host != "pkgs.$hostname"
     },
 
     /**
@@ -580,7 +585,7 @@ private fun toGitPermalink(
     if (revision.isNotEmpty()) {
         // GitHub and GitLab are tolerant about "blob" vs. "tree" here, but SourceHut requires "tree" also for files.
         val gitObject = if (path.isNotEmpty()) {
-            // Markdown files are usually rendered and can only link to lines in blame view.
+            // Markdown files are usually rendered and can only link to lines in the blame view.
             if (path.isPathToMarkdownFile() && startLine != -1) "blame" else "tree"
         } else {
             "commit"

@@ -22,17 +22,21 @@ package org.ossreviewtoolkit.analyzer
 
 import kotlin.time.measureTimedValue
 
+import org.ossreviewtoolkit.analyzer.managers.utils.PackageManagerDependencyHandler
 import org.ossreviewtoolkit.model.AnalyzerResult
 import org.ossreviewtoolkit.model.CuratedPackage
 import org.ossreviewtoolkit.model.DependencyGraph
+import org.ossreviewtoolkit.model.DependencyGraphNavigator
 import org.ossreviewtoolkit.model.Identifier
 import org.ossreviewtoolkit.model.OrtIssue
 import org.ossreviewtoolkit.model.Package
 import org.ossreviewtoolkit.model.Project
 import org.ossreviewtoolkit.model.ProjectAnalyzerResult
 import org.ossreviewtoolkit.model.createAndLogIssue
-import org.ossreviewtoolkit.model.utils.DependencyGraphConverter
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.model.utils.DependencyGraphBuilder
+import org.ossreviewtoolkit.model.utils.convertToDependencyGraph
+import org.ossreviewtoolkit.utils.common.getDuplicates
+import org.ossreviewtoolkit.utils.ort.logger
 
 class AnalyzerResultBuilder(private val curationProvider: PackageCurationProvider = PackageCurationProvider.EMPTY) {
     private val projects = sortedSetOf<Project>()
@@ -40,7 +44,16 @@ class AnalyzerResultBuilder(private val curationProvider: PackageCurationProvide
     private val issues = sortedMapOf<Identifier, List<OrtIssue>>()
     private val dependencyGraphs = sortedMapOf<String, DependencyGraph>()
 
-    fun build() = DependencyGraphConverter.convert(AnalyzerResult(projects, packages, issues, dependencyGraphs))
+    fun build(): AnalyzerResult {
+        val duplicateIds = (projects.map { it.id } + packages.map { it.pkg.id }).getDuplicates()
+        require(duplicateIds.isEmpty()) {
+            "AnalyzerResult contains packages that are also projects. Duplicates: '$duplicateIds'."
+        }
+
+        return AnalyzerResult(projects, packages, issues, dependencyGraphs)
+            .convertToDependencyGraph()
+            .resolvePackageManagerDependencies()
+    }
 
     fun addResult(projectAnalyzerResult: ProjectAnalyzerResult): AnalyzerResultBuilder {
         // TODO: It might be, e.g. in the case of PIP "requirements.txt" projects, that different projects with
@@ -84,11 +97,11 @@ class AnalyzerResultBuilder(private val curationProvider: PackageCurationProvide
     fun addPackages(packageSet: Set<Package>): AnalyzerResultBuilder {
         val (curations, duration) = measureTimedValue { curationProvider.getCurationsFor(packageSet.map { it.id }) }
 
-        log.info { "Getting package curations took $duration." }
+        logger.info { "Getting package curations took $duration." }
 
         packages += packageSet.map { pkg ->
             curations[pkg.id].orEmpty().fold(pkg.toCuratedPackage()) { cur, packageCuration ->
-                log.debug {
+                logger.debug {
                     "Applying curation '$packageCuration' to package '${pkg.id.toCoordinates()}'."
                 }
 
@@ -107,4 +120,32 @@ class AnalyzerResultBuilder(private val curationProvider: PackageCurationProvide
         dependencyGraphs[packageManagerName] = graph
         return this
     }
+}
+
+private fun AnalyzerResult.resolvePackageManagerDependencies(): AnalyzerResult {
+    if (dependencyGraphs.isEmpty()) return this
+
+    val handler = PackageManagerDependencyHandler(this)
+    val navigator = DependencyGraphNavigator(dependencyGraphs)
+
+    val graphs = projects.groupBy { it.id.type }.entries.associate { (type, projectsForType) ->
+        val builder = DependencyGraphBuilder(handler)
+
+        projectsForType.forEach { project ->
+            project.scopeNames?.forEach { scopeName ->
+                val qualifiedScopeName = DependencyGraph.qualifyScope(project, scopeName)
+                navigator.directDependencies(project, scopeName).forEach { node ->
+                    handler.resolvePackageManagerDependency(node).forEach {
+                        builder.addDependency(qualifiedScopeName, it)
+                    }
+                }
+            }
+        }
+
+        // Package managers that do not use the dependency graph representation, might not have a check implemented to
+        // verify that packages exist for all dependencies, so we need to disable the reference check here.
+        type to builder.build(checkReferences = false)
+    }
+
+    return copy(dependencyGraphs = graphs)
 }

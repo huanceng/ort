@@ -43,6 +43,7 @@ import org.ossreviewtoolkit.model.Severity
 import org.ossreviewtoolkit.model.TextLocation
 import org.ossreviewtoolkit.model.Vulnerability
 import org.ossreviewtoolkit.model.VulnerabilityReference
+import org.ossreviewtoolkit.model.config.RuleViolationResolution
 import org.ossreviewtoolkit.model.config.VulnerabilityResolution
 import org.ossreviewtoolkit.model.licenses.DefaultLicenseInfoProvider
 import org.ossreviewtoolkit.model.licenses.LicenseInfoResolver
@@ -54,7 +55,7 @@ import org.ossreviewtoolkit.model.licenses.filterExcluded
 import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.utils.common.expandTilde
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.model.SpdxLicenseChoice
 
@@ -86,7 +87,7 @@ class FreemarkerTemplateProcessor(
         }
 
         if (projectTypesAsPackages.isNotEmpty()) {
-            log.info {
+            logger.info {
                 "Handling ${projectTypesAsPackages.size} projects of types $projectTypesAsPackages as packages."
             }
         }
@@ -159,7 +160,7 @@ class FreemarkerTemplateProcessor(
         templateIds.forEach { id ->
             val outputFile = outputDir.resolve("$filePrefix$id$fileExtensionWithDot")
 
-            log.info { "Generating output file '$outputFile' using template id '$id'." }
+            logger.info { "Generating output file '$outputFile' using template id '$id'." }
 
             val template = freemarkerConfig.getTemplate("$id.ftl")
             outputFile.writer().use { template.process(dataModel, it) }
@@ -170,7 +171,7 @@ class FreemarkerTemplateProcessor(
         templateFiles.forEach { file ->
             val outputFile = outputDir.resolve("$filePrefix${file.nameWithoutExtension}$fileExtensionWithDot")
 
-            log.info { "Generating output file '$outputFile' using template file '${file.absolutePath}'." }
+            logger.info { "Generating output file '$outputFile' using template file '${file.absolutePath}'." }
 
             val template = freemarkerConfig.run {
                 setDirectoryForTemplateLoading(file.parentFile)
@@ -347,7 +348,14 @@ class FreemarkerTemplateProcessor(
             } ?: false
 
         /**
-         * Return a list of [Vulnerability]s for which there is no [VulnerabilityResolution] is provided.
+         * Return a list of [RuleViolation]s for which no [RuleViolationResolution] is provided.
+         */
+        @Suppress("UNUSED") // This function is used in the templates.
+        fun filterForUnresolvedRuleViolations(ruleViolation: List<RuleViolation>): List<RuleViolation> =
+            ruleViolation.filterNot { input.resolutionProvider.isResolved(it) }
+
+        /**
+         * Return a list of [Vulnerability]s for which no [VulnerabilityResolution] is provided.
          */
         @Suppress("UNUSED") // This function is used in the templates.
         fun filterForUnresolvedVulnerabilities(vulnerabilities: List<Vulnerability>): List<Vulnerability> =
@@ -401,7 +409,7 @@ class FreemarkerTemplateProcessor(
          */
         fun getPackage(id: Identifier): Package =
             input.ortResult.getPackage(id)?.pkg
-                ?: Package.EMPTY.also { log.warn { "Could not resolve package '${id.toCoordinates()}'." } }
+                ?: Package.EMPTY.also { logger.warn { "Could not resolve package '${id.toCoordinates()}'." } }
     }
 }
 

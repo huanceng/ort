@@ -20,7 +20,7 @@
 package org.ossreviewtoolkit.scanner.scanners.fossid
 
 import org.ossreviewtoolkit.model.config.ScannerConfiguration
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 
 /**
  * A data class that holds the configuration options supported by the [FossId] scanner. An instance of this class is
@@ -62,6 +62,9 @@ internal data class FossIdConfig(
     /** Flag whether credentials should be passed to FossID in URLs. */
     val addAuthenticationToUrl: Boolean,
 
+    /** Flag whether failed scans should be kept. */
+    val keepFailedScans: Boolean,
+
     /** Flag whether delta scans should be triggered. */
     val deltaScans: Boolean,
 
@@ -95,6 +98,9 @@ internal data class FossIdConfig(
 
         /** Name of the configuration property defining the naming convention for scans. */
         private const val NAMING_SCAN_PATTERN_PROPERTY = "namingScanPattern"
+
+        /** Name of the configuration property defining whether to keep failed scans. */
+        private const val KEEP_FAILED_SCANS_PROPERTY = "keepFailedScans"
 
         /** Name of the configuration property controlling whether delta scans are to be created. */
         private const val DELTA_SCAN_PROPERTY = "deltaScans"
@@ -131,6 +137,7 @@ internal data class FossIdConfig(
             val waitForResult = fossIdScannerOptions[WAIT_FOR_RESULT_PROPERTY]?.toBoolean() ?: true
             val addAuthenticationToUrl = fossIdScannerOptions[CREDENTIALS_IN_URL_PROPERTY]?.toBoolean() ?: false
 
+            val keepFailedScans = fossIdScannerOptions[KEEP_FAILED_SCANS_PROPERTY]?.toBoolean() ?: false
             val deltaScans = fossIdScannerOptions[DELTA_SCAN_PROPERTY]?.toBoolean() ?: false
             val deltaScanLimit = fossIdScannerOptions[DELTA_SCAN_LIMIT_PROPERTY]?.toInt() ?: Int.MAX_VALUE
             val timeout = fossIdScannerOptions[TIMEOUT]?.toInt() ?: DEFAULT_TIMEOUT
@@ -139,7 +146,7 @@ internal data class FossIdConfig(
                 "deltaScanLimit must be > 0, current value is $deltaScanLimit."
             }
 
-            log.info { "waitForResult parameter is set to '$waitForResult'" }
+            logger.info { "waitForResult parameter is set to '$waitForResult'" }
 
             return FossIdConfig(
                 serverUrl = serverUrl,
@@ -147,6 +154,7 @@ internal data class FossIdConfig(
                 apiKey = apiKey,
                 waitForResult = waitForResult,
                 addAuthenticationToUrl = addAuthenticationToUrl,
+                keepFailedScans = keepFailedScans,
                 deltaScans = deltaScans,
                 deltaScanLimit = deltaScanLimit,
                 timeout = timeout,
@@ -160,11 +168,11 @@ internal data class FossIdConfig(
      */
     fun createNamingProvider(): FossIdNamingProvider {
         val namingProjectPattern = options[NAMING_PROJECT_PATTERN_PROPERTY]?.also {
-            log.info { "Naming pattern for projects is $it." }
+            logger.info { "Naming pattern for projects is $it." }
         }
 
         val namingScanPattern = options[NAMING_SCAN_PATTERN_PROPERTY]?.also {
-            log.info { "Naming pattern for scans is $it." }
+            logger.info { "Naming pattern for scans is $it." }
         }
 
         val namingConventionVariables = options

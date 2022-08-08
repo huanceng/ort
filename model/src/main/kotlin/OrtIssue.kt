@@ -27,8 +27,7 @@ import com.fasterxml.jackson.databind.ser.std.StdSerializer
 import java.time.Instant
 
 import org.ossreviewtoolkit.utils.common.normalizeLineBreaks
-import org.ossreviewtoolkit.utils.ort.log
-import org.ossreviewtoolkit.utils.ort.logOnce
+import org.ossreviewtoolkit.utils.ort.logger
 
 /**
  * An issue that occurred while executing ORT.
@@ -77,6 +76,6 @@ inline fun <reified T : Any> T.createAndLogIssue(
 ): OrtIssue {
     val issue = severity?.let { OrtIssue(source = source, message = message, severity = it) }
         ?: OrtIssue(source = source, message = message)
-    logOnce(issue.severity.toLog4jLevel()) { message }
+    logger.log(issue.severity.toLog4jLevel()) { message }
     return issue
 }

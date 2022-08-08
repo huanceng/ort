@@ -27,8 +27,6 @@ import java.net.ProxySelector
 import java.net.SocketAddress
 import java.net.URI
 
-import org.apache.logging.log4j.Level
-
 import org.ossreviewtoolkit.utils.common.Os
 
 typealias AuthenticatedProxy = Pair<Proxy, PasswordAuthentication?>
@@ -50,12 +48,11 @@ class OrtProxySelector(private val fallback: ProxySelector? = null) : ProxySelec
         fun install(): OrtProxySelector {
             val current = getDefault()
             return if (current is OrtProxySelector) {
-                logOnce(Level.INFO) { "Proxy selector is already installed." }
                 current
             } else {
                 OrtProxySelector(current).also {
                     setDefault(it)
-                    log.info { "Proxy selector was successfully installed." }
+                    logger.info { "Proxy selector was successfully installed." }
                 }
             }
         }
@@ -69,10 +66,10 @@ class OrtProxySelector(private val fallback: ProxySelector? = null) : ProxySelec
             return if (current is OrtProxySelector) {
                 current.fallback.also {
                     setDefault(it)
-                    log.info { "Proxy selector was successfully uninstalled." }
+                    logger.info { "Proxy selector was successfully uninstalled." }
                 }
             } else {
-                log.info { "Proxy selector is not installed." }
+                logger.info { "Proxy selector is not installed." }
                 current
             }
         }
@@ -229,7 +226,7 @@ fun determineProxyFromURL(url: String?): AuthenticatedProxy? {
     if (url == null) return null
 
     val uri = runCatching {
-        // Assume http if no protocol is specified to be able to create an URI.
+        // Assume http if no protocol is specified to be able to create a URI.
         URI(url.takeIf { "://" in it } ?: "http://$url")
     }.getOrElse {
         return null

@@ -51,7 +51,7 @@ import org.ossreviewtoolkit.utils.common.CommandLineTool
 import org.ossreviewtoolkit.utils.common.textValueOrEmpty
 import org.ossreviewtoolkit.utils.ort.DeclaredLicenseProcessor
 import org.ossreviewtoolkit.utils.ort.ProcessedDeclaredLicense
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.spdx.SpdxConstants
 import org.ossreviewtoolkit.utils.spdx.SpdxOperator
 
@@ -99,7 +99,7 @@ class Cargo(
 
     private fun readHashes(lockfile: File): Map<String, String> {
         if (!lockfile.isFile) {
-            log.debug { "Cannot determine the hashes of remote artifacts because the Cargo lockfile is missing." }
+            logger.debug { "Cannot determine the hashes of remote artifacts because the Cargo lockfile is missing." }
             return emptyMap()
         }
 
@@ -118,7 +118,7 @@ class Cargo(
     }
 
     /**
-     * Check if a package is a project. All path dependencies inside of the analyzer root are treated as project
+     * Check if a package is a project. All path dependencies inside the analyzer root are treated as project
      * dependencies.
      */
     private fun isProjectDependency(id: String) =
@@ -247,7 +247,7 @@ private fun parseDeclaredLicenses(node: JsonNode): SortedSet<String> {
         .map { it.trim() }
         .filterTo(sortedSetOf()) { it.isNotEmpty() }
 
-    // Cargo allows to declare non-SPDX licenses only by referencing a license file. If a license file is specified, add
+    // Cargo allows declaring non-SPDX licenses only by referencing a license file. If a license file is specified, add
     // an unknown declared license to indicate that there is a declared license, but we cannot know which it is at this
     // point.
     // See: https://doc.rust-lang.org/cargo/reference/manifest.html#the-license-and-license-file-fields

@@ -20,18 +20,11 @@
 import com.expediagroup.graphql.plugin.gradle.config.GraphQLSerializer
 import com.expediagroup.graphql.plugin.gradle.graphql
 
-val graphqlPluginVersion: String by project
-val kotlinxSerializationVersion: String by project
-val ktorVersion: String by project
-val log4jApiKotlinVersion: String by project
-val wiremockVersion: String by project
-
 plugins {
     `java-library`
 
-    kotlin("plugin.serialization")
-
-    id("com.expediagroup.graphql")
+    alias(libs.plugins.graphQl)
+    alias(libs.plugins.kotlinSerialization)
 }
 
 graphql {
@@ -44,10 +37,11 @@ graphql {
 }
 
 dependencies {
-    implementation("com.expediagroup:graphql-kotlin-ktor-client:$graphqlPluginVersion")
-    implementation("io.ktor:ktor-client-okhttp:$ktorVersion")
-    implementation("org.apache.logging.log4j:log4j-api-kotlin:$log4jApiKotlinVersion")
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$kotlinxSerializationVersion")
+    api(libs.ktorClientCore)
 
-    testImplementation("com.github.tomakehurst:wiremock-jre8:$wiremockVersion")
+    implementation(libs.graphQlKtorClient)
+    implementation(libs.kotlinxSerialization)
+    implementation(libs.log4jApiKotlin)
+
+    testImplementation(libs.wiremock)
 }

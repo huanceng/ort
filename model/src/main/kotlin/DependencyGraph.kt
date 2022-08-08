@@ -22,7 +22,6 @@ package org.ossreviewtoolkit.model
 import com.fasterxml.jackson.annotation.JsonIgnore
 import com.fasterxml.jackson.annotation.JsonInclude
 
-import java.lang.IllegalStateException
 import java.util.SortedSet
 
 /**
@@ -53,7 +52,7 @@ typealias NodeDependencies = Map<DependencyGraphNode, List<DependencyGraphNode>>
  *   not have to be repeated over and over: All the references to packages are expressed by indices into this list.
  * - *nodes*: An ordered list with the nodes of the dependency graph. A single node represents a package, and
  *   therefore has a reference into the list with package coordinates. It can, however, happen that packages occur
- *   multiple times in the graph if they are in different sub trees with different sets of transitive dependencies.
+ *   multiple times in the graph if they are in different subtrees with different sets of transitive dependencies.
  *   Then there are multiple nodes for the packages affected, and a *fragmentIndex* is used to identify them uniquely.
  *   Nodes also store information about issues of a package and their linkage.
  * - *edges*: Here the structure of the graph comes in. Each edge connects two nodes and represents a directed
@@ -170,8 +169,7 @@ data class DependencyGraph(
     private fun createScopesFor(map: Map<String, List<RootDependencyIndex>>, unqualify: Boolean): SortedSet<Scope> =
         map.mapTo(sortedSetOf()) { entry ->
             val dependencies = entry.value.mapTo(sortedSetOf()) { index ->
-                referenceMapping[index.toKey()]
-                    ?: throw IllegalStateException("Could not resolve dependency index $index.")
+                referenceMapping[index.toKey()] ?: error("Could not resolve dependency index $index.")
             }
 
             val scopeName = if (unqualify) unqualifyScope(entry.key) else entry.key

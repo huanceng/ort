@@ -54,9 +54,8 @@ val handledLicenses = listOf(
 }
 
 /**
- * Function to return Markdown-formatted text to aid users with resolving violations.
+ * Return the Markdown-formatted text to aid users with resolving violations.
  */
-
 fun PackageRule.howToFixDefault() = """
         A text written in MarkDown to help users resolve policy violations
         which may link to additional resources.
@@ -92,176 +91,197 @@ fun PackageRule.LicenseRule.isCopyleftLimited() =
  * Example policy rules
  */
 
-// Define the set of policy rules.
-val ruleSet = ruleSet(ortResult, licenseInfoResolver, resolutionProvider) {
-    // Define a rule that is executed for each package.
-    packageRule("UNHANDLED_LICENSE") {
-        // Do not trigger this rule on packages that have been excluded in the .ort.yml.
-        require {
-            -isExcluded()
-        }
-
-        // Define a rule that is executed for each license of the package.
-        licenseRule("UNHANDLED_LICENSE", LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED) {
-            require {
-                -isExcluded()
-                -isHandled()
-            }
-
-            // Throw an error message including guidance how to fix the issue.
-            error(
-                "The license $license is currently not covered by policy rules. " +
-                        "The license was ${licenseSource.name.lowercase()} in package " +
-                        "${pkg.id.toCoordinates()}",
-                howToFixDefault()
-            )
-        }
+fun RuleSet.unhandledLicenseRule() = packageRule("UNHANDLED_LICENSE") {
+    // Do not trigger this rule on packages that have been excluded in the .ort.yml.
+    require {
+        -isExcluded()
     }
 
-    packageRule("UNMAPPED_DECLARED_LICENSE") {
+    // Define a rule that is executed for each license of the package.
+    licenseRule("UNHANDLED_LICENSE", LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED) {
         require {
             -isExcluded()
+            -isHandled()
         }
 
-        resolvedLicenseInfo.licenseInfo.declaredLicenseInfo.processed.unmapped.forEach { unmappedLicense ->
-            warning(
-                "The declared license '$unmappedLicense' could not be mapped to a valid license or parsed as an SPDX " +
-                        "expression. The license was found in package ${pkg.id.toCoordinates()}.",
-                howToFixDefault()
-            )
-        }
-    }
-
-    packageRule("COPYLEFT_IN_SOURCE") {
-        require {
-            -isExcluded()
-        }
-
-        licenseRule("COPYLEFT_IN_SOURCE", LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED) {
-            require {
-                -isExcluded()
-                +isCopyleft()
-            }
-
-            val message = if (licenseSource == LicenseSource.DETECTED) {
-                "The ScanCode copyleft categorized license $license was ${licenseSource.name.lowercase()} " +
-                        "in package ${pkg.id.toCoordinates()}."
-            } else {
-                "The package ${pkg.id.toCoordinates()} has the ${licenseSource.name.lowercase()} ScanCode copyleft " +
-                        "catalogized license $license."
-            }
-
-            error(message, howToFixDefault())
-        }
-
-        licenseRule("COPYLEFT_LIMITED_IN_SOURCE", LicenseView.CONCLUDED_OR_DECLARED_OR_DETECTED) {
-            require {
-                -isExcluded()
-                +isCopyleftLimited()
-            }
-
-            val licenseSourceName = licenseSource.name.lowercase()
-            val message = if (licenseSource == LicenseSource.DETECTED) {
-                if (pkg.id.type == "Unmanaged") {
-                    "The ScanCode copyleft-limited categorized license $license was $licenseSourceName in package " +
-                            "${pkg.id.toCoordinates()}."
-                } else {
-                    "The ScanCode copyleft-limited categorized license $license was $licenseSourceName in package " +
-                            "${pkg.id.toCoordinates()}."
-                }
-            } else {
-                "The package ${pkg.id.toCoordinates()} has the $licenseSourceName ScanCode copyleft-limited " +
-                        "categorized license $license."
-            }
-
-            error(message, howToFixDefault())
-        }
-    }
-
-    packageRule("VULNERABILITY_IN_PACKAGE") {
-        require {
-            -isExcluded()
-            +hasVulnerability()
-        }
-
-        issue(
-            Severity.WARNING,
-            "The package ${pkg.id.toCoordinates()} has a vulnerability",
+        // Throw an error message including guidance how to fix the issue.
+        error(
+            "The license $license is currently not covered by policy rules. " +
+                    "The license was ${licenseSource.name.lowercase()} in package " +
+                    "${pkg.id.toCoordinates()}",
             howToFixDefault()
         )
     }
+}
 
-    packageRule("HIGH_SEVERITY_VULNERABILITY_IN_PACKAGE") {
-        val maxAcceptedSeverity = "5.0"
-        val scoringSystem = "CVSS2"
+fun RuleSet.unmappedDeclaredLicenseRule() = packageRule("UNMAPPED_DECLARED_LICENSE") {
+    require {
+        -isExcluded()
+    }
 
+    resolvedLicenseInfo.licenseInfo.declaredLicenseInfo.processed.unmapped.forEach { unmappedLicense ->
+        warning(
+            "The declared license '$unmappedLicense' could not be mapped to a valid license or parsed as an SPDX " +
+                    "expression. The license was found in package ${pkg.id.toCoordinates()}.",
+            howToFixDefault()
+        )
+    }
+}
+
+fun RuleSet.copyleftInSourceRule() = packageRule("COPYLEFT_IN_SOURCE") {
+    require {
+        -isExcluded()
+    }
+
+    licenseRule("COPYLEFT_IN_SOURCE", LicenseView.CONCLUDED_OR_DECLARED_AND_DETECTED) {
         require {
             -isExcluded()
-            +hasVulnerability(maxAcceptedSeverity, scoringSystem) { value, threshold ->
-                value.toFloat() >= threshold.toFloat()
+            +isCopyleft()
+        }
+
+        val message = if (licenseSource == LicenseSource.DETECTED) {
+            "The ScanCode copyleft categorized license $license was ${licenseSource.name.lowercase()} " +
+                    "in package ${pkg.id.toCoordinates()}."
+        } else {
+            "The package ${pkg.id.toCoordinates()} has the ${licenseSource.name.lowercase()} ScanCode copyleft " +
+                    "catalogized license $license."
+        }
+
+        error(message, howToFixDefault())
+    }
+}
+
+fun RuleSet.copyleftInSourceLimitedRule() = packageRule("COPYLEFT_LIMITED_IN_SOURCE") {
+    require {
+        -isExcluded()
+    }
+
+    licenseRule("COPYLEFT_LIMITED_IN_SOURCE", LicenseView.CONCLUDED_OR_DECLARED_OR_DETECTED) {
+        require {
+            -isExcluded()
+            +isCopyleftLimited()
+        }
+
+        val licenseSourceName = licenseSource.name.lowercase()
+        val message = if (licenseSource == LicenseSource.DETECTED) {
+            if (pkg.id.type == "Unmanaged") {
+                "The ScanCode copyleft-limited categorized license $license was $licenseSourceName in package " +
+                        "${pkg.id.toCoordinates()}."
+            } else {
+                "The ScanCode copyleft-limited categorized license $license was $licenseSourceName in package " +
+                        "${pkg.id.toCoordinates()}."
             }
+        } else {
+            "The package ${pkg.id.toCoordinates()} has the $licenseSourceName ScanCode copyleft-limited " +
+                    "categorized license $license."
+        }
+
+        error(message, howToFixDefault())
+    }
+}
+
+fun RuleSet.vulnerabilityInPackageRule() = packageRule("VULNERABILITY_IN_PACKAGE") {
+    require {
+        -isExcluded()
+        +hasVulnerability()
+    }
+
+    issue(
+        Severity.WARNING,
+        "The package ${pkg.id.toCoordinates()} has a vulnerability",
+        howToFixDefault()
+    )
+}
+
+fun RuleSet.highSeverityVulnerabilityInPackageRule() = packageRule("HIGH_SEVERITY_VULNERABILITY_IN_PACKAGE") {
+    val maxAcceptedSeverity = "5.0"
+    val scoringSystem = "CVSS2"
+
+    require {
+        -isExcluded()
+        +hasVulnerability(maxAcceptedSeverity, scoringSystem) { value, threshold ->
+            value.toFloat() >= threshold.toFloat()
+        }
+    }
+
+    issue(
+        Severity.ERROR,
+        "The package ${pkg.id.toCoordinates()} has a vulnerability with $scoringSystem severity > " +
+                "$maxAcceptedSeverity",
+        howToFixDefault()
+    )
+}
+
+fun RuleSet.copyleftInDependencyRule() = dependencyRule("COPYLEFT_IN_DEPENDENCY") {
+    licenseRule("COPYLEFT_IN_DEPENDENCY", LicenseView.CONCLUDED_OR_DECLARED_OR_DETECTED) {
+        require {
+            +isCopyleft()
         }
 
         issue(
             Severity.ERROR,
-            "The package ${pkg.id.toCoordinates()} has a vulnerability with $scoringSystem severity > " +
-                    "$maxAcceptedSeverity",
+            "The project ${project.id.toCoordinates()} has a dependency licensed under the ScanCode " +
+                    "copyleft categorized license $license.",
             howToFixDefault()
         )
     }
+}
 
-    // Define a rule that is executed for each dependency of a project.
-    dependencyRule("COPYLEFT_IN_DEPENDENCY") {
-        licenseRule("COPYLEFT_IN_DEPENDENCY", LicenseView.CONCLUDED_OR_DECLARED_OR_DETECTED) {
-            require {
-                +isCopyleft()
-            }
-
-            issue(
-                Severity.ERROR,
-                "The project ${project.id.toCoordinates()} has a dependency licensed under the ScanCode " +
-                        "copyleft categorized license $license.",
-                howToFixDefault()
-            )
-        }
+fun RuleSet.copyleftLimitedInDependencyRule() = dependencyRule("COPYLEFT_LIMITED_IN_DEPENDENCY_RULE") {
+    require {
+        +isAtTreeLevel(0)
+        +isStaticallyLinked()
     }
 
-    dependencyRule("COPYLEFT_LIMITED_STATIC_LINK_IN_DIRECT_DEPENDENCY") {
+    licenseRule("COPYLEFT_LIMITED_IN_DEPENDENCY_RULE", LicenseView.CONCLUDED_OR_DECLARED_OR_DETECTED) {
         require {
-            +isAtTreeLevel(0)
-            +isStaticallyLinked()
+            +isCopyleftLimited()
         }
 
-        licenseRule("LINKED_WEAK_COPYLEFT", LicenseView.CONCLUDED_OR_DECLARED_OR_DETECTED) {
-            require {
-                +isCopyleftLimited()
-            }
-
-            // Use issue() instead of error() if you want to set the severity.
-            issue(
-                Severity.WARNING,
-                "The project ${project.id.toCoordinates()} has a statically linked direct dependency licensed " +
-                        "under the ScanCode copyleft-left categorized license $license.",
-                howToFixDefault()
-            )
-        }
+        // Use issue() instead of error() if you want to set the severity.
+        issue(
+            Severity.WARNING,
+            "The project ${project.id.toCoordinates()} has a statically linked direct dependency licensed " +
+                    "under the ScanCode copyleft-left categorized license $license.",
+            howToFixDefault()
+        )
     }
+}
 
-    ortResultRule("DEPRECATED_SCOPE_EXCLUDE_REASON_IN_ORT_YML") {
-        val reasons = ortResult.repository.config.excludes.scopes.mapTo(mutableSetOf()) { it.reason }
+fun RuleSet.deprecatedScopeExcludeReasonInOrtYmlRule() = ortResultRule("DEPRECATED_SCOPE_EXCLUDE_REASON_IN_ORT_YML") {
+    val reasons = ortResult.repository.config.excludes.scopes.mapTo(mutableSetOf()) { it.reason }
 
-        @Suppress("DEPRECATION")
-        val deprecatedReasons = setOf(ScopeExcludeReason.TEST_TOOL_OF)
+    @Suppress("DEPRECATION")
+    val deprecatedReasons = setOf(ScopeExcludeReason.TEST_TOOL_OF)
 
-        reasons.intersect(deprecatedReasons).forEach { offendingReason ->
-            warning(
-                "The repository configuration is using the deprecated scope exclude reason '$offendingReason'.",
-                "Please use only non-deprecated scope exclude reasons, see " +
-                        "https://github.com/oss-review-toolkit/ort/blob/main/model/src/main/" +
-                        "kotlin/config/ScopeExcludeReason.kt."
-            )
-        }
+    reasons.intersect(deprecatedReasons).forEach { offendingReason ->
+        warning(
+            "The repository configuration is using the deprecated scope exclude reason '$offendingReason'.",
+            "Please use only non-deprecated scope exclude reasons, see " +
+                    "https://github.com/oss-review-toolkit/ort/blob/main/model/src/main/" +
+                    "kotlin/config/ScopeExcludeReason.kt."
+        )
     }
+}
+
+/**
+ * The set of policy rules.
+ */
+val ruleSet = ruleSet(ortResult, licenseInfoResolver, resolutionProvider) {
+    // Rules which get executed for each package:
+    unhandledLicenseRule()
+    unmappedDeclaredLicenseRule()
+    copyleftInSourceRule()
+    copyleftInSourceLimitedRule()
+    vulnerabilityInPackageRule()
+    highSeverityVulnerabilityInPackageRule()
+
+    // Rules which get executed for each dependency (of any project):
+    copyleftInDependencyRule()
+    copyleftLimitedInDependencyRule()
+
+    // Rules which get executed once:
+    deprecatedScopeExcludeReasonInOrtYmlRule()
 }
 
 // Populate the list of policy rule violations to return.

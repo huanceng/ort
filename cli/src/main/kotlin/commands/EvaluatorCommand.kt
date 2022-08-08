@@ -78,7 +78,7 @@ import org.ossreviewtoolkit.utils.ort.ORT_EVALUATOR_RULES_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_LICENSE_CLASSIFICATIONS_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_REPO_CONFIG_FILENAME
 import org.ossreviewtoolkit.utils.ort.ORT_RESOLUTIONS_FILENAME
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.ort.ortConfigDirectory
 
 class EvaluatorCommand : CliktCommand(name = "evaluate", help = "Evaluate ORT result files against policy rules.") {
@@ -258,11 +258,12 @@ class EvaluatorCommand : CliktCommand(name = "evaluate", help = "Evaluate ORT re
 
         if (checkSyntax) {
             if (Evaluator().checkSyntax(script)) {
+                println("Syntax check succeeded.")
                 return
-            } else {
-                println("Syntax check failed.")
-                throw ProgramResult(2)
             }
+
+            println("Syntax check failed.")
+            throw ProgramResult(2)
         }
 
         val existingOrtFile = requireNotNull(ortFile) {
@@ -290,7 +291,7 @@ class EvaluatorCommand : CliktCommand(name = "evaluate", help = "Evaluate ORT re
             )
         } else {
             if (ortResultInput.repository.config.packageConfigurations.isNotEmpty()) {
-                log.info { "Local package configurations were not applied because the feature is not enabled." }
+                logger.info { "Local package configurations were not applied because the feature is not enabled." }
             }
 
             packageConfigurationOption.createProvider()
@@ -313,7 +314,7 @@ class EvaluatorCommand : CliktCommand(name = "evaluate", help = "Evaluate ORT re
 
         val (evaluatorRun, duration) = measureTimedValue { evaluator.run(script) }
 
-        log.info { "Executed the evaluator in $duration." }
+        logger.info { "Executed the evaluator in $duration." }
 
         evaluatorRun.violations.forEach { violation ->
             println(violation.format())

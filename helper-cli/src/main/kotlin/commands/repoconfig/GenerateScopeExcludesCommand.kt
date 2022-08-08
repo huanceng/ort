@@ -117,9 +117,9 @@ private fun getScopeExcludesForPackageManager(packageManagerName: String): List<
         )
         "GoMod" -> listOf(
             ScopeExclude(
-                pattern = "all",
-                reason = ScopeExcludeReason.BUILD_DEPENDENCY_OF,
-                comment = "Packages to build all targets including tests only."
+                pattern = "vendor",
+                reason = ScopeExcludeReason.DEV_DEPENDENCY_OF,
+                comment = "Packages to build and test the main module."
             )
         )
         "Gradle" -> listOf(

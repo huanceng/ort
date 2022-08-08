@@ -91,7 +91,7 @@ class UploadResultToPostgresCommand : CliktCommand(
                     val config = configs.first()
                     println(
                         "Multiple PostgreSQL storages are configured, using the first one which points to schema " +
-                                "${config.schema} at ${config.url}."
+                                "${config.connection.schema} at ${config.connection.url}."
                     )
                 }
 
@@ -111,7 +111,7 @@ class UploadResultToPostgresCommand : CliktCommand(
         }
 
         val dataSource = DatabaseUtils.createHikariDataSource(
-            config = postgresConfig,
+            config = postgresConfig.connection,
             applicationNameSuffix = "upload-result-command"
         )
 

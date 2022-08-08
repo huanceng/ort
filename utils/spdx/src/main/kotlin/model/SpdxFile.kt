@@ -137,7 +137,7 @@ data class SpdxFile(
         DOCUMENTATION,
 
         /**
-         * The file is associated with an picture image file (MIME type of image, e.g. .jpg, .gif).
+         * The file is associated with a picture image file (MIME type of image, e.g. .jpg, .gif).
          */
         IMAGE,
 
@@ -157,7 +157,7 @@ data class SpdxFile(
         SPDX,
 
         /**
-         * The file is a human readable text file (MIME type of text).
+         * The file is a human-readable text file (MIME type of text).
          */
         TEXT,
 
@@ -186,7 +186,7 @@ data class SpdxFile(
         }
 
         // TODO: The check for [licenseInfoInFiles] can be made more strict, but the SPDX specification is not exact
-        // enough yet to do this safely.
+        //       enough yet to do this safely.
         licenseInfoInFiles.filterNot { it.isSpdxExpressionOrNotPresent() }.let {
             require(it.isEmpty()) {
                 "The entries in licenseInfoInFiles must each be either an SpdxExpression, 'NONE' or 'NOASSERTION', " +

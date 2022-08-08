@@ -37,7 +37,7 @@ import org.ossreviewtoolkit.model.config.AdvisorConfiguration
 import org.ossreviewtoolkit.model.utils.toPurl
 import org.ossreviewtoolkit.utils.common.enumSetOf
 import org.ossreviewtoolkit.utils.ort.OkHttpClientHelper
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 
 import retrofit2.HttpException
 
@@ -47,7 +47,7 @@ import retrofit2.HttpException
 private const val BULK_REQUEST_SIZE = 128
 
 /**
- * A wrapper for [Sonatype OSS Index](https://ossindex.sonatype.org/) security vulnerability data.
+ * A wrapper for Sonatype's [OSS Index](https://ossindex.sonatype.org/) security vulnerability data.
  */
 class OssIndex(name: String, serverUrl: String = OssIndexService.DEFAULT_BASE_URL) : AdviceProvider(name) {
     class Factory : AbstractAdviceProviderFactory<OssIndex>("OssIndex") {
@@ -110,7 +110,12 @@ class OssIndex(name: String, serverUrl: String = OssIndexService.DEFAULT_BASE_UR
 
         val references = mutableListOf(reference)
         externalReferences?.mapTo(references) { reference.copy(url = URI(it)) }
-        return Vulnerability(cve ?: displayName ?: title, references)
+        return Vulnerability(
+            id = cve ?: displayName ?: title,
+            summary = title,
+            description = description,
+            references = references
+        )
     }
 
     /**
@@ -122,7 +127,7 @@ class OssIndex(name: String, serverUrl: String = OssIndexService.DEFAULT_BASE_UR
         coordinates: List<String>
     ): List<OssIndexService.ComponentReport> =
         try {
-            log.debug { "Querying component report from ${OssIndexService.DEFAULT_BASE_URL}." }
+            logger.debug { "Querying component report from ${OssIndexService.DEFAULT_BASE_URL}." }
             service.getComponentReport(OssIndexService.ComponentReportRequest(coordinates))
         } catch (e: HttpException) {
             throw IOException(e)

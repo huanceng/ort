@@ -18,10 +18,6 @@
  * License-Filename: LICENSE
  */
 
-val kotlinxCoroutinesVersion: String by project
-val mockkVersion: String by project
-val wiremockVersion: String by project
-
 plugins {
     // Apply core plugins.
     `java-library`
@@ -31,12 +27,19 @@ dependencies {
     api(project(":clients:cve-manager"))
     api(project(":clients:nexus-iq"))
     api(project(":clients:oss-index"))
+    api(project(":clients:osv"))
     api(project(":clients:vulnerable-code"))
     api(project(":clients:github-graphql"))
     api(project(":model"))
 
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:$kotlinxCoroutinesVersion")
+    implementation(libs.cvssCalculator)
+    implementation(libs.kotlinxCoroutines)
+    implementation(libs.kotlinxSerialization)
+    implementation(libs.ktorClientOkHttp)
 
-    testImplementation("com.github.tomakehurst:wiremock-jre8:$wiremockVersion")
-    testImplementation("io.mockk:mockk:$mockkVersion")
+    testImplementation(libs.mockk)
+    testImplementation(libs.wiremock)
+
+    funTestImplementation(libs.jacksonModuleKotlin)
+    funTestApi(libs.jacksonDatabind)
 }

@@ -34,7 +34,7 @@ import org.ossreviewtoolkit.model.ScanResult
 import org.ossreviewtoolkit.reporter.Reporter
 import org.ossreviewtoolkit.reporter.ReporterInput
 import org.ossreviewtoolkit.utils.common.collectMessages
-import org.ossreviewtoolkit.utils.ort.log
+import org.ossreviewtoolkit.utils.ort.logger
 import org.ossreviewtoolkit.utils.ort.showStackTrace
 
 class FossIdReporter : Reporter {
@@ -45,7 +45,7 @@ class FossIdReporter : Reporter {
         /** Name of the configuration property for the API key. */
         const val API_KEY_PROPERTY = "apiKey"
 
-        /** Name of the configuration property for the user name. */
+        /** Name of the configuration property for the username. */
         const val USER_PROPERTY = "user"
 
         /** Name of the configuration property for the report type. Default is [ReportType.HTML_DYNAMIC]. */
@@ -58,7 +58,7 @@ class FossIdReporter : Reporter {
         const val SELECTION_TYPE_PROPERTY = "selectionType"
 
         // TODO: The below should be unified with [FossId.SCAN_CODE_KEY], without creating a dependency between scanner
-        // and reporter.
+        //       and reporter.
         /**
          * Name of key in [ScanResult.additionalData] containing the scancode.
          */
@@ -95,11 +95,11 @@ class FossIdReporter : Reporter {
             input.ortResult.scanner?.results?.scanResults?.values?.flatten()?.mapNotNull { result ->
                 result.additionalData[SCAN_CODE_KEY]?.let { scanCode ->
                     async {
-                        this@FossIdReporter.log.info { "Generating report for scan $scanCode." }
+                        this@FossIdReporter.logger.info { "Generating report for scan $scanCode." }
                         service.generateReport(user, apiKey, scanCode, reportType, selectionType, outputDir)
                             .onFailure {
                                 it.showStackTrace()
-                                this@FossIdReporter.log.info {
+                                this@FossIdReporter.logger.info {
                                     "Error during report generation: ${it.collectMessages()}."
                                 }
                             }.getOrNull()

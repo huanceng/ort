@@ -1,0 +1,14 @@
+.batect/
+../.gradle/
+.idea/
+!.idea/icon*.png
+build/
+out/
+/local.properties
+/*.iml
+
+# Kotest temporary directory
+.kotest/
+
+# Mac
+.DS_Store
